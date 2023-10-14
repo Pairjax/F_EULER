@@ -38,6 +38,7 @@ r_PrintImage:
     move.l d0, d1
     lsr.l #8, d0            ; Image Width (left word)
     lsr.l #8, d0
+    move.l d0, d4           ; Store width in d4 to prevent destruction
     and.l #$0000FFFF, d1    ; Image Height (right word)
         
     move.l d3, d5           ; Start X Position
@@ -75,19 +76,11 @@ r_PrintImage:
     bls.l .PrintPixel        ; If not, keep on printing
         
     ; Otherwise, we move to the next row
-    sub.l d6, d3            ; Move X back to the starting column
-    sub.l #1, d3
+    sub.l d4, d3            ; Move X back to the starting column
     add.l #1, d2            ; Move Y down a row
         
     cmp.l d7, d2            ; Is Y past End Y Position?
     ble.l .PrintPixel         ; If not, keep printing.
-
-.SwapBuffer:
-
-    *| Now that we're done, let's swap buffers
-    move.l #94, d0
-    
-    TRAP #15
 
 .Return:
 
@@ -108,7 +101,7 @@ r_ClearSprites:
 
 .LoadRegister:
     move.l #pixel_clear_zones, a0    ; Current sprite index
-    move.l #pixel_clear_length, a1   ; End sprite index
+    move.l (pixel_clear_length), a1   ; End sprite index
     move.l #pg_Background, a2        ; Background
 
     ; Is pixel clear zones empty?
@@ -200,12 +193,8 @@ r_ClearSprites:
     cmp.l a0, a1                    ; Is current sprite index at or past end sprite index?
     bls.l .GetSprite                ; If not, let's keep on going.
 
-.SwapBuffer:
-
-    *| Now that we're done, let's swap buffers
-    move.l #94, d0
-    
-    TRAP #15
+    ; If we're done, we reset the clear zones as we have emptied it out
+    move.l #pixel_clear_zones, pixel_clear_length
 
 .Return:
 
@@ -215,6 +204,24 @@ r_ClearSprites:
 *| [End of Function] ClearSprites
 *|__________________________________________________
 *`                                                  `
+
+*,__________________________________________________,
+*| fn SwapBuffer
+*| Changes buffer to show changes to pixels on screen
+SwapBuffer:
+    move.l d0, -(sp)
+    
+    move.l #SWAP_BUFFER, d0
+    
+    TRAP #15
+
+    move.l (sp)+, d0
+
+    rts
+*| [End of Function] ClearSprites
+*|__________________________________________________
+*`                                                  `
+
 *~Font name~Courier New~
 *~Font size~10~
 *~Tab type~1~

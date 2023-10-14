@@ -23,8 +23,12 @@ SCREEN_WIDTH        EQU 640
 SCREEN_HEIGHT       EQU 480
 
 *| TRAP Codes
+GET_KEY_INPUT_COMMAND   EQU 19
+
 SET_PIXEL_COLOR     EQU 80
 PRINT_PIXEL         EQU 82
+
+SWAP_BUFFER         EQU 94
 
 *,__________________________________________________,
 *| Includes
@@ -55,12 +59,12 @@ Main:
     move.l #$00000000, d1
     move.l #pg_Background, a0
     jsr r_PrintImage
+    
+    move.l #0, d0
+    move.l #1, d1
+    move.l #0, d7   ; Halt Flag
 
-    move.l #pg_Ship, a0
-    move.l #$00000001, d1   ; Is Temporary = true;
-    jsr r_PrintImage
-
-    jsr r_ClearSprites
+    jsr GameLoop
 
     STOP #$3000
 *| [End of Function] Main
@@ -72,15 +76,11 @@ Main:
 *| Description: Perpetually runs game until the quit 
 *| command is given
 GameLoop:
-    ; d0 = Halt Flag
-
     *,___________________________,
     *| STAGE ONE: Capture Inputs |
     *|___________________________|
     *`                           `
-    move.l #0, d0                `
-    move.l #0, d1
-    
+
     ; jsr CapturePlayerInputs   ; Fills registers (destructively) with player inputs
     ; We use this to run the rest of the operations
 
@@ -98,14 +98,41 @@ GameLoop:
     *| STAGE FOUR: Rendering     |
     *|___________________________|
     *`                           `
-    ; Render ship
-    
+    ; Clear old sprites from screen
+    jsr r_ClearSprites ; Wipe sprites from screen
 
-    cmp.l #0, d0    ; Is Halt Flag true?
+    ; Render ship
+    move.l #pg_Ship, a0
+    jsr r_PrintImage
+
+    ; Render other things
+
+    ; Swap Buffer
+    jsr SwapBuffer
+
+    add.l #$00010001, d0    ; move XY offset on the diagonal
+
+    cmp.l #0, d7    ; Is Halt Flag true?
     beq.l GameLoop  ; If not, continue loop
 
     rts
 *| [End of Function] GameLoop
+*|__________________________________________________
+*`                                                  `
+
+*,__________________________________________________,
+*| [Inputs] fn GetUserInput
+*| Description: Captures all relevant game inputs
+i_GetuserInput:
+    movem.l ALL_REG, -(sp) *| Push registers to stack
+
+    
+    
+.Return:
+    movem.l (sp)+, ALL_REG  *| Pull registers from stack
+
+    rts
+*| [End of Function] GetUserInput
 *|__________________________________________________
 *`                                                  `
 
@@ -144,6 +171,7 @@ pg_7SegVertical     ds.l 65     ; 1 + 16x4
 pg_7SegHorizontal   ds.l 65     ; 1 + 16x4
     
     END    START
+
 
 *~Font name~Courier New~
 *~Font size~10~
