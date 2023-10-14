@@ -1,4 +1,11 @@
 *,__________________________________________________,
+*| File Loader                                      |
+*| Description: Handles loading of any file type    |
+*| into a game-ready state.                         |
+*|__________________________________________________|
+*`                                                  `
+
+*,__________________________________________________,
 *| fn LoadResources
 *| Description: Loads every file in the game
 fl_LoadFiles:
@@ -9,6 +16,7 @@ fl_LoadFiles:
 
     move.l #ShipBmpFile, a0         *| file_root
     move.l #pg_Ship, a1             *| output_image
+    jsr fl_LoadBitmap
     
     rts
 *| [End of Function] LoadResources
@@ -151,6 +159,7 @@ ParseLittleEndianLong:  ; Simple function to convert d1 LW from Little Endian to
 *| [End of Function] ParseLittleEndianLong
 *|__________________________________________________
 *`                                                  `
+
 
 *~Font name~Courier New~
 *~Font size~10~
