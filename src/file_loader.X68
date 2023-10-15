@@ -5,6 +5,9 @@
 *|__________________________________________________|
 *`                                                  `
 
+SHIP_BMP_SIZE       EQU 1162    ; The number of bytes betwen each ship file
+SHIP_PG_SIZE        EQU 1028     ; The size of a ship sprite in memory
+
 *,__________________________________________________,
 *| fn LoadResources
 *| Description: Loads every file in the game
@@ -14,12 +17,32 @@ fl_LoadFiles:
     move.l #pg_Background, a1       *| output_image
     jsr fl_LoadBitmap
 
-    move.l #ShipBmpFile, a0         *| file_root
-    move.l #pg_Ship, a1             *| output_image
-    jsr fl_LoadBitmap
+    jsr fl_LoadShipRotations
     
     rts
 *| [End of Function] LoadResources
+*|__________________________________________________
+*`                                                  `
+
+*,__________________________________________________,
+*| fn LoadShipRotations
+*| Description: Loads every ship rotation. Lots of 
+*| manual, boring calculations. 
+fl_LoadShipRotations:
+    move.l #ShipBmpFiles, a0
+    move.l #pg_ShipRotations, a1
+
+.LoadBmp:
+    jsr fl_LoadBitmap
+
+    add.l #SHIP_BMP_SIZE, a0
+    add.l #SHIP_PG_SIZE, a1
+
+    cmp.l #EndShipBmpFiles, a0  ; Are we past the end?
+    blt.l .LoadBmp              ; If not, keep on loading.
+
+    rts
+*| [End of Function] LoadShipRotations
 *|__________________________________________________
 *`                                                  `
 
@@ -28,6 +51,7 @@ fl_LoadFiles:
 *| Inputs: file_root: bitmap*, output_image: pixel_grid*
 *| Description: Loads a single bitmap
 fl_LoadBitmap:
+    movem.l ALL_REG, -(sp) *| Push registers to stack
 
 ParseBitmapHeader: ; Gather essential information from the bitmap's header
     ; This will need to be converted to Big Endian later based on the Color Range
@@ -140,6 +164,7 @@ GetSinglePixel:
     ble.l GetSinglePixel    ; If not, continue the loop
         
     ; If so, we've finished sorting.
+    movem.l (sp)+, ALL_REG  *| Pull registers from stack
 
     rts
 *| [End of Function] LoadBitmap

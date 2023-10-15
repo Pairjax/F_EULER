@@ -37,8 +37,11 @@ ESC                 EQU $1B
 SHIFT               EQU $10
 SPACE               EQU $20
 
-*| PHYSICS
+*| Physics
 MAX_VELOCITY        EQU $00030000
+FP_360              EQU $01680000   ; Hex value for 360 degrees in 16.16 fixed point
+FP_22P5             EQU $00168000   ; Hex value for 22.5 degrees in 16.16 fixed point
+FP_11P25            EQU $000B4000   ; Hex value for 11.25 degrees in 16.16 fixed point
 
 *,__________________________________________________,
 *| Includes
@@ -71,7 +74,7 @@ Main:
     jsr r_PrintImage
     
     ; Set up start variables for game loop
-    move.l #0, d0   ; Start position of ship
+    move.l #$0221012C, d0   ; Start position of ship
     move.l #1, d1   ; Is ship a sprite? Yes!
 
     jsr GameLoop
@@ -86,7 +89,7 @@ Main:
 *| Description: Perpetually runs game until the quit 
 *| command is given.
 *| Persistent Variables:
-*| d2: Rotation, 
+*| d2: Rotation, DeltaTime 
 *| d3: WASD Inputs, d4: Enter, Esc, Shift, and Space Inputs
 *| d5: Position, d6: Velocity, d7: Acceleration
 *| a3: Ship model to use
@@ -101,7 +104,8 @@ GameLoop:
     *| STAGE TWO: Physics Pass   |
     *|___________________________|
     *`                           `
-
+    jsr ph_CalculateRotation
+    jsr ph_SelectShipRotation
 
     *,___________________________,
     *| STAGE THREE: UI Pass      |
@@ -116,7 +120,8 @@ GameLoop:
     jsr r_ClearSprites ; Wipe sprites from screen
 
     ; Render ship
-    move.l #pg_Ship, a0
+    ; move.l #pg_Ship, a0
+    move.l a3, a0   ; Move ship image address to the correct location
     jsr r_PrintImage
 
     ; Render other things
@@ -124,16 +129,8 @@ GameLoop:
     ; Swap Buffer
     jsr SwapBuffer
 
-    and.l #$000000FF, d3    ; Extracting only D from WASD input
-
-    cmp.l #$FF, d3          ; Is D being pressed?
-    bne.l .NoInput          ; If not, let's skip movement
-
-    add.l #$00010000, d0    ; Move the ship to the right.
-
-.NoInput:
     and.l #$00FF0000, d4
-    cmp.l #00FF0000, d4    ; Did player press ESC?
+    cmp.l #$00FF0000, d4    ; Did player press ESC?
     bne.l GameLoop  ; If not, continue loop
 
     rts
@@ -145,14 +142,49 @@ GameLoop:
 *| [Physics] fn CalculateRotation
 *| Description: Take A & D inputs and rotate ship.
 ph_CalculateRotation:
-    movem.l ALL_REG, -(sp)  *| Push registers to stack
+    movem.l TRAP_REG, -(sp)  *| Push registers to stack
 
     move.l d3, d0   ; Copying WASD inputs to extract A & D
     move.l d0, d1
 
-    and.l #$000000FF, d1    ; D input
+    lsr.l #8, d0            ; A key input
+    lsr.l #8, d0
+    and.l #$000000FF, d0    ; Chopping off W input
+
+    and.l #$000000FF, d1    ; D key input
+
+    cmp.l d0, d1            ; Are A & D both pressed or not pressed?
+    beq.l .Return           ; If so, let's skip to the end.
+
+.TurnLeft:
+    cmp.l #0, d0
+    beq.l .TurnRight
+
+    sub.l #00010000, d2
+
+    jmp .FixAngle
+
+.TurnRight:
+    add.l #00010000, d2
     
-    movem.l (sp)+, ALL_REG  *| Pull registers from stack
+.FixAngle:
+    cmp.l #FP_360, d2       ; Is d2 greater than 360?
+    bgt.l .AngleOver
+    cmp.l #0, d2            ; Is d2 negative?
+    blt.l .AngleUnder
+
+    jmp .Return
+
+.AngleOver:
+    sub.l #FP_360, d2          
+
+    jmp .Return
+
+.AngleUnder:
+    add.l #FP_360, d2
+
+.Return
+    movem.l (sp)+, TRAP_REG  *| Pull registers from stack
 
     rts
 *| [End of Function] CalculateRotations
@@ -160,10 +192,89 @@ ph_CalculateRotation:
 *`                                                  `
 
 *,__________________________________________________,
+*| [Physics] fn SelectShipRotation
+*| Description: Takes current rotation & selects ship image based off of it
+ph_SelectShipRotation:
+    movem.l TRAP_REG, -(sp)  *| Push registers to stack
+
+    move.l d2, d0   ; Take angle to temporary variable
+    move.l #0, d1   ; d1 stores ship index
+    sub.l #FP_11P25, d0 ; Subtract angle by 11.25
+
+.NextRot:
+    add.l #1, d1        
+
+    sub.l #FP_22P5, d0  ; Subtract angle by 11.25
+    cmp.l #0, d0        ; Is angle under 0?
+    bge.l .NextRot      ; If not, get next rotation
+
+    ; We de-increment by 1 to go back to the desired index
+    sub.l #1, d1
+
+    cmp.l #16, d1       ; Is d1 greater than 15?
+    blt.l .GetFile      ; If not, we ignore the next step
+
+    move.l #0, d1       ; If we went past 15, we reset back to the first index
+
+.GetFile:
+    mulu.w #1028, d1     ; Multiply by size of ship's pixel grid
+    add.l #pg_ShipRotations, d1
+    move.l d1, a3
+
+.Return
+    movem.l (sp)+, TRAP_REG  *| Pull registers from stack
+
+    rts
+*| [End of Function] SelectShipRotation
+*|__________________________________________________
+*`                                                  `
+
+*,__________________________________________________,
 *| [Physics] fn CalculateAcceleration
 *| Description: Takes W & S inputs to find acceleration magnitude
+ph_CalculateAcceleration:
+    move.l d3, d0   ; Copying WASD inputs to extract A & D
+    move.l d0, d1
 
+    lsr.l #8, d0            ; W key input
+    lsr.l #8, d0
+    lsr.l #8, d0
+
+    lsr.l #8, d1            ; S key input
+    and.l #$000000FF, d1    
+
+    cmp.l d0, d1            ; Are S & S both pressed or not pressed?
+    beq.l .Return           ; If so, let's skip to the end.
+
+    cmp.l #0, d0            ; Are we accelerating?
+    beq.l .Decel            ; If not, then we must be decelerating.
+
+.Accel:
+    move.l #$0080, d0   ; magnitude of acceleration (0.5)
+
+    jmp .Return
+
+.Decel:
+    move.l #$FFCF, d0   ; magnitude of acceleration (-0.25)
+
+
+.Return:
+
+    rts
 *| [End of Function] CalculateAcceleration
+*|__________________________________________________
+*`                                                  `
+
+*,__________________________________________________,
+*| [Physics] fn CalculateVelocity
+*| Description: Take acceleration and use it to calculate velocity
+ph_CalculateVelocity
+
+
+.Return:
+
+    rts
+*| [End of Function] CalculateVelocity
 *|__________________________________________________
 *`                                                  `
 
@@ -195,25 +306,24 @@ sinTable        dc.w    $0,$47,$8E,$D6,$11D,$164,$1AC,$1F3,$23A,$280,$2C7
 BackgroundBmpFile   INCBIN "../resources/background.bmp"
 ; RoadCollisionFile   INCBIN "../resources/collision.txt"
 
-ShipBmpFile         INCBIN "../resources/ship.bmp"
-
 *| Ship Rotations
-Ship0BmpFile        INCBIN "../resources/ship_rotations/Ship_R0.bmp"
-Ship22BmpFile       INCBIN "../resources/ship_rotations/Ship_R22.5.bmp"
-Ship45BmpFile       INCBIN "../resources/ship_rotations/Ship_R45.bmp"
-Ship67BmpFile       INCBIN "../resources/ship_rotations/Ship_R67.5.bmp"
-Ship90BmpFile       INCBIN "../resources/ship_rotations/Ship_R90.bmp"
-Ship112BmpFile      INCBIN "../resources/ship_rotations/Ship_R112.5.bmp"
-Ship135BmpFile      INCBIN "../resources/ship_rotations/Ship_R135.bmp"
-Ship157BmpFile      INCBIN "../resources/ship_rotations/Ship_R157.5.bmp"
-Ship180BmpFile      INCBIN "../resources/ship_rotations/Ship_R180.bmp"
-Ship202BmpFile      INCBIN "../resources/ship_rotations/Ship_R202.5.bmp"
-Ship225BmpFile      INCBIN "../resources/ship_rotations/Ship_R225.bmp"
-Ship247BmpFile      INCBIN "../resources/ship_rotations/Ship_R247.5.bmp"
-Ship270BmpFile      INCBIN "../resources/ship_rotations/Ship_R270.bmp"
-Ship292BmpFile      INCBIN "../resources/ship_rotations/Ship_R292.5.bmp"
-Ship315BmpFile      INCBIN "../resources/ship_rotations/Ship_R315.bmp"
-Ship337BmpFile      INCBIN "../resources/ship_rotations/Ship_R337.5.bmp"
+ShipBmpFiles        INCBIN "../resources/ship_rotations/Ship_R0.bmp"
+                    INCBIN "../resources/ship_rotations/Ship_R22.5.bmp"
+                    INCBIN "../resources/ship_rotations/Ship_R45.bmp"
+                    INCBIN "../resources/ship_rotations/Ship_R67.5.bmp"
+                    INCBIN "../resources/ship_rotations/Ship_R90.bmp"
+                    INCBIN "../resources/ship_rotations/Ship_R112.5.bmp"
+                    INCBIN "../resources/ship_rotations/Ship_R135.bmp"
+                    INCBIN "../resources/ship_rotations/Ship_R157.5.bmp"
+                    INCBIN "../resources/ship_rotations/Ship_R180.bmp"
+                    INCBIN "../resources/ship_rotations/Ship_R202.5.bmp"
+                    INCBIN "../resources/ship_rotations/Ship_R225.bmp"
+                    INCBIN "../resources/ship_rotations/Ship_R247.5.bmp"
+                    INCBIN "../resources/ship_rotations/Ship_R270.bmp"
+                    INCBIN "../resources/ship_rotations/Ship_R292.5.bmp"
+                    INCBIN "../resources/ship_rotations/Ship_R315.bmp"
+                    INCBIN "../resources/ship_rotations/Ship_R337.5.bmp"
+EndShipBmpFiles
 
 
 ; DebrisBmpFile       INCBIN "../resources/debris.bmp"
@@ -230,7 +340,9 @@ Ship337BmpFile      INCBIN "../resources/ship_rotations/Ship_R337.5.bmp"
 *| $4 = ABGR Pixels (List, length x * y)
 *>Renderer
 pg_Background   ds.l 307201     ; 1 + 640x480
-pg_Ship         ds.l 257        ; 1 + 16x16
+
+pg_ShipRotations        ds.l 4112   ; (1 + 16x16) x 16 for 16 unique sprites
+
 pg_Debris       ds.l 257        ; 1 + 16x16
 
 *| Data Type: Pixel Clear Zones -> List<vec2, vec2>
@@ -245,6 +357,10 @@ pg_7SegVertical     ds.l 65     ; 1 + 16x4
 pg_7SegHorizontal   ds.l 65     ; 1 + 16x4
     
     END    START
+
+
+
+
 
 
 

@@ -56,8 +56,12 @@ r_PrintImage:
     add.l #4, a0
         
 .PrintPixel:
-    move.l #SET_PIXEL_COLOR, d0 ; TRAP Set Pen Color
     move.l (a0), d1             ; Get current pixel color
+
+    cmp.l #$00FFFFFF, d1        ; Is pixel color transparent?
+    bls.l .NoPrint              ; If so, let's skip printing
+    
+    move.l #SET_PIXEL_COLOR, d0 ; TRAP Set Pen Color
 
     and.l #$00FFFFFF, d1        ; Chop off alpha
         
@@ -68,7 +72,8 @@ r_PrintImage:
    
     TRAP #15
       
-    ; Done printing, let's calculate the next target pixel.
+.NoPrint:
+    ; Calculate the next target pixel.
     add.l #4, a0            ; Move pointer to next color pixel
         
     add.l #1, d3            ; Move X to the next column
