@@ -11,6 +11,11 @@ FP_360              EQU $01680000   ; Hex value for 360 degrees in 16.16 fixed p
 FP_22P5             EQU $00168000   ; Hex value for 22.5 degrees in 16.16 fixed point
 FP_11P25            EQU $000B4000   ; Hex value for 11.25 degrees in 16.16 fixed point
 
+ACCEL_AMOUNT        EQU $00003000   ; Increases speed at 0.125 pixels per frame 
+DECEL_AMOUNT        EQU $00001000   ; Increases speed at 0.0625 pixels per frame 
+
+MAX_SPEED           EQU $0002000
+
 *,__________________________________________________,
 *| [Physics] fn CalculateRotation
 *| Description: Take A & D inputs and rotate ship.
@@ -33,12 +38,12 @@ ph_CalculateRotation:
     cmp.l #0, d0
     beq.l .TurnRight
 
-    sub.l #00040000, d2
+    sub.l #00080000, d2
 
     jmp .FixAngle
 
 .TurnRight:
-    add.l #00040000, d2
+    add.l #00080000, d2
     
 .FixAngle:
     cmp.l #FP_360, d2       ; Is d2 greater than 360?
@@ -103,6 +108,83 @@ ph_SelectShipRotation:
 *`                                                  `
 
 *,__________________________________________________,
+*| [Physics] fn CalculateVelocityMagnitude
+*| Description: Takes W & S inputs to calculate velocity magnitude
+ph_CalcVelMagnitude:
+    movem.l TRAP_REG, -(sp)  *| Push registers to stack
+
+    move.l d3, d0           ; Copying WASD inputs to extract A & D
+    move.l d0, d1
+
+    lsr.l #8, d0            ; W key input
+    lsr.l #8, d0
+    lsr.l #8, d0
+
+    lsr.l #8, d1            ; S key input
+    and.l #$000000FF, d1    
+
+    cmp.l d0, d1            ; Are S & S both pressed or not pressed?
+    beq.l .Fric             ; If so, let's apply friction.
+
+    cmp.l #0, d0            ; Are we accelerating?
+    beq.l .Decel            ; If not, then we must be decelerating. 
+
+.Accel: ; Move forwards
+    add.l #ACCEL_AMOUNT, d7 
+
+    ; if boosting, add more?
+
+    jmp .Clamp
+
+.Decel: ; Move backwards
+    sub.l #DECEL_AMOUNT, d7 
+
+.Clamp:
+.ClampMin:
+    cmp.l #0, d7    
+    bge.l .ClampMax
+
+    move.l #0, d7
+
+    jmp .Return
+
+.ClampMax:
+    cmp.l #MAX_SPEED, d7    
+    ble.l .Return
+
+    move.l #MAX_SPEED, d7
+
+    jmp .Return
+
+.Fric:  ; Return to 0 over time while not boosting
+    asl.l #1, d7
+    cmp.l #$FFFFFFFF, d7    ; Is d7 at its lowest possible value?
+    bne.l .Return           ; If not, skip this next step
+
+    move.l #0, d7           ; Return to 0 rather than being stuck at almost -0
+
+.Return:
+    movem.l (sp)+, TRAP_REG  *| Pull registers from stack
+
+    rts
+*| [End of Function] CalculateVelocityMagnitude
+*|__________________________________________________
+*`                                                  `
+
+*,__________________________________________________,
+*| [Physics] fn CalculateVelocityDirection
+*| Description: Takes rotation & velocity magnitude to find vector of move direction
+ph_CalcVelDir:
+
+.Return:
+    movem.l (sp)+, TRAP_REG  *| Pull registers from stack
+
+    rts
+*| [End of Function] CalculateVelocityDirection
+*|__________________________________________________
+*`                                                  `
+
+*,__________________________________________________,
 *| [Physics] fn CalculateAcceleration
 *| Description: Takes W & S inputs to find acceleration magnitude
 ph_CalculateAcceleration:
@@ -125,7 +207,7 @@ ph_CalculateAcceleration:
     beq.l .Decel            ; If not, then we must be decelerating.
 
 .Accel:
-    move.l #$00000001, d1   ; magnitude of acceleration (0.5)
+    move.l #$00000004, d1   ; magnitude of acceleration (0.5)
 
     jmp .Vec
 
@@ -170,10 +252,14 @@ ph_CalculateAcceleration:
     
     lsr.l #8, d0            ; x component
     lsr.l #8, d0
-    lsr.l #1, d0            ; Divide by two
+
+    asr.w #1, d0            ; Divide by two
+
+    lsl.l #8, d0            ; Move back to position for merge
+    lsl.l #8, d0
 
     and.l #$0000FFFF, d7    ; y component
-    lsr.l #1, d7            ; Divide by two
+    asr.w #1, d7            ; Divide by two
 
     or.l d0, d7            ; New acceleration
 
@@ -193,27 +279,32 @@ ph_CalculateAcceleration:
 ph_CalculateVelocity:
     movem.l TRAP_REG, -(sp)  *| Push registers to stack
     
-    move.l d7, d0
-    lsr.l #4, d0            ; Shift everything to chop off excess fractionals
-    and.l #$0FFF0FFF, d0    ; Chop off hanging fractional on y vector
-    
-    move.l d0, d1           ; Case: Was X or Y negative? 
-.xNeg:
-    and.l #$08000000, d1    ; X case
-    cmp.l #$08000000, d1    ; was X negative? (was leftmost bit 1?)
-    bne.l .yNeg
+    move.l d7, d0           ; Pull acceleration out
+    move.l d0, d1 
 
+    lsr.l #8, d0            ; Extract to two registers
+    lsr.l #8, d0            ; X value
+    and.l #$0000FFFF, d1    ; Y value
 
-    
-.yNeg:
+    move.l d6, d3           ; Extract to two registers
+    lsr.l #8, d6            ; X value
+    lsr.l #8, d6
+    and.l #$0000FFFF, d3    ; Y value
 
+    add.w d0, d6
+    add.w d1, d3
+
+    lsl.l #8, d6
+    lsl.l #8, d6
+
+    or.l d3, d6
 
 .Fric: ; Apply friction to slow the vehicle down
 
 .Apply:
     *| ClampVector(d0=magnitude_sqr: word, d1=vector) -> d1=clamped_vector
     move.l d6, d1
-    move.l #$00000001, d0   *| Max of 1
+    move.l #$000000FF, d0   *| Max of 1
 
     jsr ph_ClampVector
     
@@ -234,10 +325,28 @@ ph_CalculatePosition:
     movem.l TRAP_REG, -(sp)  *| Push registers to stack
 
     move.l d6, d0
-    lsr.l #8, d0            ; Shift everything to chop off fractionals
-    and.l #$00FF00FF, d0    ; Chop off remaining fractionals
+    move.l d0, d1 
 
-    add.l d0, d5
+    lsr.l #8, d0
+    lsr.l #8, d0
+    and.l #$0000FFFF, d1
+    
+    asr.w #8, d0            ; X adjusted to whole number
+    asr.w #4, d0
+    asr.w #8, d1            ; Y adjusted to whole number
+    asr.w #4, d1
+
+    move.l d5, d3
+    lsr.l #8, d3
+    lsr.l #8, d3
+    and.l #$0000FFFF, d5
+
+    add.w d0, d3
+    add.w d1, d5
+    lsl.l #8, d3
+    lsl.l #8, d3
+
+    or.l d3, d5
 
 .Return:
     movem.l (sp)+, TRAP_REG  *| Pull registers from stack
@@ -250,7 +359,7 @@ ph_CalculatePosition:
 *,__________________________________________________,
 *| [Physics] fn ClampNumber
 *| Description: Clamp a word between two values
-*| Inputs: d0: value to clamp, d1: left word min, right word max
+*| Inputs: d0: value to clamp, d1: min, d3: max
 *| Returns: d0: clamped value
 ph_ClampNumber:
     move.l d2, -(sp) ; Temporarily move d2 out of the way
@@ -314,8 +423,19 @@ ph_ClampVector:
     ble.l .Return   ; If not, carry on as usual
 
     ; If so, let's CUT IT IN HALF muahahaha
-    lsl.l #1, d1
-    and.l #$FFFF7FFF, d1    ; Cut off hanging bit at 9th bit
+    move.l d1, d2
+
+    lsr.l #8, d2
+    lsr.l #8, d2
+    and.l #$0000FFFF, d1
+    
+    asr.w #1, d2            ; X
+    asr.w #1, d1            ; Y
+    
+    lsl.l #8, d2
+    lsl.l #8, d2
+
+    or.l d2, d1
 
 .Return:
     move.l (sp)+, d3

@@ -90,7 +90,7 @@ GameLoop:
 
     move.l d1, d0
     sub.l LastTime, d0
-    cmp.l #5, d0            ; Is time elapsed less than 5 seconds?
+    cmp.l #3, d0            ; Is time elapsed less than 5 seconds?
     bls.l GameLoop          ; If not, wait
     move.l d1, LastTime     ; Otherwise, this is the new last time
 
@@ -204,6 +204,7 @@ pg_7SegVertical     ds.l 65     ; 1 + 16x4
 pg_7SegHorizontal   ds.l 65     ; 1 + 16x4
     
     END    START
+
 
 
 
