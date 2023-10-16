@@ -5,6 +5,12 @@
 *|__________________________________________________|
 *`                                                  `
 
+*| Input Codes
+ENTER               EQU $D
+ESC                 EQU $1B
+SHIFT               EQU $10
+SPACE               EQU $20
+
 *,__________________________________________________,
 *| [Inputs] fn GetUserInput
 *| Description: Captures all relevant game inputs
