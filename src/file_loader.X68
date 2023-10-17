@@ -27,6 +27,8 @@ fl_LoadFiles:
     move.l #pg_7SegHorizontal, a1       *| output_image
     jsr fl_LoadBitmap
 
+    jsr fl_LoadCollisionMap     ; No inputs needed because there is only one
+
     jsr fl_LoadShipRotations
     
     rts
@@ -195,6 +197,61 @@ ParseLittleEndianLong:  ; Simple function to convert d1 LW from Little Endian to
 *|__________________________________________________
 *`                                                  `
 
+*,__________________________________________________,
+*| fn LoadCollisionMap
+fl_LoadCollisionMap:
+    move.l #RoadCollisionFile, a0
+    move.l #cm_Road, a1 ; Start of array
+
+    move.l #0, d0       ; Current index in array
+
+.GetPixelMat:           ; Get pixel material
+    move.b (a0), d1 
+    
+.OffRoad:
+    cmp.b #$30, d1      ; Is material offroad?
+    bne.l .OnRoad       ; Move to next case
+
+    move.b #0, (a1)
+    add.l #1, d0
+    add.l #1, a1
+
+.OnRoad:
+    cmp.b #$31, d1      ; Is material onroad?
+    bne.l .Lap          ; Move to next case
+
+    move.b #1, (a1)
+    add.l #1, d0
+    add.l #1, a1
+
+.Lap:
+    cmp.b #$32, d1      ; Is material lap?
+    bne.l .MidLap       ; Move to next case
+
+    move.b #2, (a1)
+    add.l #1, d0
+    add.l #1, a1
+
+.MidLap:
+    cmp.b #$33, d1      ; Is material mid-lap?
+    bne.l .End          ; Move to next case
+
+    move.b #3, (a1)
+    add.l #1, d0
+    add.l #1, a1
+
+.End:
+    add.l #1, a0
+
+    cmp.l #307200, d0   ; Are we at end of array?
+    blt.l .GetPixelMat  ; Otherwise, let's start it all over again
+
+.Return:
+    rts
+
+*| [End of Function] LoadBitmap
+*|__________________________________________________
+*`                                                  `
 
 *~Font name~Courier New~
 *~Font size~10~
