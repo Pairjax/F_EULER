@@ -196,7 +196,7 @@ r_ClearSprites:
 
 .CheckEndOfSprites:
     cmp.l a0, a1                    ; Is current sprite index at or past end sprite index?
-    bls.l .GetSprite                ; If not, let's keep on going.
+    blt.l .GetSprite                ; If not, let's keep on going.
 
     ; If we're done, we reset the clear zones as we have emptied it out
     move.l #pixel_clear_zones, pixel_clear_length

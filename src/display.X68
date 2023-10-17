@@ -76,6 +76,9 @@ ss_SevenSegUpdate:
     add.l #2, a1            ; Move to next word
     move.w d0, (a1)         ; Put the actual number in for reference
 
+    ; Wipe other old sprites because sprite clearing only works one image at a time (needs fixing!)
+    jsr r_ClearSprites
+
     ; Mark new clear zone
     move.l (a0), d3
     
