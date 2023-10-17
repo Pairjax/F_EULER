@@ -126,13 +126,7 @@ GameLoop:
     jsr cl_CheckCollisions
 
     *,___________________________,
-    *| STAGE THREE: UI Pass      |
-    *|___________________________|
-    *`                           `
-
-
-    *,___________________________,
-    *| STAGE FOUR: Rendering     |
+    *| STAGE THREE: Rendering    |
     *|___________________________|
     *`                           `
     ; Clear old sprites from screen
@@ -144,17 +138,19 @@ GameLoop:
     move.l d5, d0   ; Move position to offset
     jsr r_PrintImage
 
-    ; Render other things
-
     ; Swap Buffer
     jsr SwapBuffer
 
+    cmp.w #1, flag_IsDead   ; did player die?
+    beq.l .Return  ; If so, end loop
+
     and.l #$00FF0000, d4
     cmp.l #$00FF0000, d4    ; Did player press ESC?
-    bne.l GameLoop  ; If not, continue loop
-    
-    cmp.w #1, flag_IsDead   ; did player die?
-    bne.l GameLoop  ; If not, continue loop
+    beq.l .Return  ; If so, continue loop
+
+    jmp GameLoop
+
+.Return:
 
     rts
 *| [End of Function] GameLoop
@@ -259,6 +255,7 @@ cl_GetCollisionMaterial:
     add.l d1, a0                ; Offset to material
 
     move.b (a0), d0             ; Grab material
+    and.l #$000000FF, d0            ; Cut off leftmost bits
 
 .Return:
 
@@ -378,6 +375,7 @@ pg_7SegVertical     ds.l 65     ; 1 + 16x4
 pg_7SegHorizontal   ds.l 65     ; 1 + 16x4
     
     END    START
+
 
 
 

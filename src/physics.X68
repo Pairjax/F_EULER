@@ -157,11 +157,11 @@ ph_CalcVelMagnitude:
     jmp .Return
 
 .Fric:  ; Return to 0 over time while not boosting
-    asl.l #1, d7
-    cmp.l #$FFFFFFFF, d7    ; Is d7 at its lowest possible value?
-    bne.l .Return           ; If not, skip this next step
+    ; asl.l #1, d7
+    ; cmp.l #$FFFFFFFF, d7    ; Is d7 at its lowest possible value?
+    ; bne.l .Return           ; If not, skip this next step
 
-    move.l #0, d7           ; Return to 0 rather than being stuck at almost -0
+    ; move.l #0, d7           ; Return to 0 rather than being stuck at almost -0
 
 .Return:
     movem.l (sp)+, TRAP_REG  *| Pull registers from stack
