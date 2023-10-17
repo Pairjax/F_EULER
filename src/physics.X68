@@ -239,18 +239,43 @@ ph_CalculatePosition:
     movem.l TRAP_REG, -(sp)  *| Push registers to stack
 
     move.l d6, d0
-    move.l d0, d1 
+    move.l d0, d1
 
     lsr.l #8, d0
     lsr.l #8, d0
     and.l #$0000FFFF, d1
-    
-    asl.w #8, d0            ; X adjusted to 16.16
-    or.l #$FF000000, d0
 
-    asr.w #8, d1            ; Y adjusted to 16.16
-    or.l #$FF000000, d1
+.negX:
+    cmp.w #0, d0    ; Is d0 less than zero?
+    bge.l .posX 
 
+    neg.w d0
+
+    ; If so, let's transform to 16.16 
+    lsl.l #8, d0
+    neg.l d0
+
+    jmp .negY
+
+.posX:
+    lsl.l #8, d0
+
+.negY:
+    cmp.w #0, d0    ; Is d0 less than zero?
+    bge.l .posY
+
+    neg.w d1
+
+    ; If so, let's transform to 16.16 
+    lsl.l #8, d1
+    neg.l d1
+
+    jmp .updatePos
+
+.posY:
+    lsl.l #8, d1
+
+.updatePos:
     ; Update precise ship position
     move.l #ShipPosition, a4
 
@@ -260,7 +285,7 @@ ph_CalculatePosition:
 
     move.l d1, (a4)
     sub.l #4, a4
-    move.l d1, (a4)
+    move.l d0, (a4)
 
     ; Now, update integer ship position (pixel)
 

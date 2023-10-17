@@ -36,9 +36,9 @@ SWAP_BUFFER         EQU 94
     INCLUDE "./file_loader.x68"   ; Handles loading of files during preload phase
     INCLUDE "./renderer.x68"      ; Handles printing sprites & affine transformations.
     INCLUDE "./inputs.x68"        ; Handles player inputs for processing
-* INCLUDE "./gameplay.x68"      ; Handles in-game timer, lap counter, and game states
+* INCLUDE "./gameplay.x68"        ; Handles in-game timer, lap counter, and game states
     INCLUDE "./physics.x68"       ; Calculates player acceleration, velocity, and collisions.
-* INCLUDE "./7_segment_led.x68" ; Displays a 7-segment LED with the given parameters.
+* INCLUDE "./7_segment_led.x68"   ; Displays a 7-segment LED with the given parameters.
 
 *,__________________________________________________,
 *| fn Main
@@ -58,11 +58,12 @@ Main:
     
     move.l #$00000000, d0   ; Position has no offset
     move.l #$00000000, d1   ; This is not a sprite, it's the background
+    move.l #$00000000, d2
     move.l #pg_Background, a0
     jsr r_PrintImage
     
     ; Set up start variables for game loop
-    move.l #$0221012C, d5   ; Start position of ship   
+    move.l #$0221012C, d5   ; Start position of ship
 
     move.l #8, d0
     TRAP #15
@@ -115,6 +116,7 @@ GameLoop:
     *| STAGE THREE: UI Pass      |
     *|___________________________|
     *`                           `
+
 
     *,___________________________,
     *| STAGE FOUR: Rendering     |
@@ -172,8 +174,14 @@ EndShipBmpFiles
 
 ; DebrisBmpFile       INCBIN "../resources/debris.bmp"
 
-; 7SegVerticalBmpFile INCBIN "../resources/7SegVertical.bmp"
-; 7SegVerticalBmpFile INCBIN "../resources/7SegHorizontal.bmp"
+7SegVerticalBmpFile     INCBIN "../resources/7SegVertical.bmp"
+7SegHorizontalBmpFile   INCBIN "../resources/7SegHorizontal.bmp"
+
+; A table containing bytes where each bit represents on or off
+; for a segment on the display. Table starts at 0 and ends at 9
+7SegTable           dc.b %11101110,%00100100,%10111010,
+                    dc.b %10110110,%01110100,%11010110,
+                    dc.b %11011110,%10100100,%11111110,%11110100
 
 *,__________________________________________________,
 *| Global Variables
@@ -204,6 +212,7 @@ pg_7SegVertical     ds.l 65     ; 1 + 16x4
 pg_7SegHorizontal   ds.l 65     ; 1 + 16x4
     
     END    START
+
 
 
 
