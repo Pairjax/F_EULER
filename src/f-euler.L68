@@ -1,6 +1,6 @@
 00002000 Starting Address
 Assembler used: EASy68K Editor/Assembler v5.16.01
-Created On: 10/16/2023 5:51:37 PM
+Created On: 10/17/2023 11:00:10 AM
 
 00000000                             1  *,______________________________________________________,
 00000000                             2  *|__________  ______________  ________________________  |
@@ -33,964 +33,1237 @@ Created On: 10/16/2023 5:51:37 PM
 00001000  =00000050                 29  SET_PIXEL_COLOR     EQU 80
 00001000  =00000052                 30  PRINT_PIXEL         EQU 82
 00001000                            31  
-00001000  =0000005E                 32  SWAP_BUFFER         EQU 94
+00001000  =00000008                 32  GET_TIME            EQU 8
 00001000                            33  
-00001000                            34  *,__________________________________________________,
-00001000                            35  *| Includes
-00001000                            36      INCLUDE "./file_loader.x68"   ; Handles loading of files during preload phase
-00001000                            37  
-00001000  =0000048A                 38  SHIP_BMP_SIZE       EQU 1162    ; The number of bytes betwen each ship file
-00001000  =00000404                 39  SHIP_PG_SIZE        EQU 1028     ; The size of a ship sprite in memory
-00001000                            40  
-00001000                            41  fl_LoadFiles:
-00001000                            42      *| LoadBitmap(a0=file_root: bitmap*, a1=output_image: pixel_grid*)
-00001000  207C 00002090             43      move.l #BackgroundBmpFile, a0   *| file_root
-00001006  227C 001329BA             44      move.l #pg_Background, a1       *| output_image
-0000100C  4EB9 00001044             45      jsr fl_LoadBitmap
-00001012                            46  
-00001012  4EB9 0000101A             47      jsr fl_LoadShipRotations
-00001018                            48      
-00001018  4E75                      49      rts
-0000101A                            50  
-0000101A                            51  fl_LoadShipRotations:
-0000101A  207C 0012E11A             52      move.l #ShipBmpFiles, a0
-00001020  227C 0025E9BE             53      move.l #pg_ShipRotations, a1
-00001026                            54  
-00001026                            55  .LoadBmp:
-00001026  4EB9 00001044             56      jsr fl_LoadBitmap
-0000102C                            57  
-0000102C  D1FC 0000048A             58      add.l #SHIP_BMP_SIZE, a0
-00001032  D3FC 00000404             59      add.l #SHIP_PG_SIZE, a1
-00001038                            60  
-00001038  B1FC 001329BA             61      cmp.l #EndShipBmpFiles, a0  ; Are we past the end?
-0000103E  6D00 FFE6                 62      blt.l .LoadBmp              ; If not, keep on loading.
-00001042                            63  
-00001042  4E75                      64      rts
-00001044                            65  
-00001044                            66  fl_LoadBitmap:
-00001044  48E7 FFFE                 67      movem.l ALL_REG, -(sp) *| Push registers to stack
-00001048                            68  
-00001048                            69  ParseBitmapHeader: ; Gather essential information from the bitmap's header
-00001048                            70      ; This will need to be converted to Big Endian later based on the Color Range
-00001048  2648                      71      move.l a0, a3
-0000104A  D7FC 0000000A             72      add.l #$A, a3               ; Offset to pixel array
-00001050  2213                      73      move.l (a3), d1
-00001052                            74          
-00001052  4EB9 00001108             75      jsr ParseLittleEndianLong
-00001058                            76          
-00001058  D288                      77      add.l a0, d1
-0000105A  2801                      78      move.l d1, d4               ; Offset to Pixel Array
-0000105C                            79          
-0000105C  2648                      80      move.l a0, a3
-0000105E  D7FC 00000012             81      add.l #$12, a3              ; Offset to image width
-00001064  2213                      82      move.l (a3), d1             ; Image Width
-00001066  4EB9 00001108             83      jsr ParseLittleEndianLong
-0000106C  2A01                      84      move.l d1, d5
-0000106E                            85          
-0000106E  2648                      86      move.l a0, a3
-00001070  D7FC 00000016             87      add.l #$16, a3              ; Offset to image height
-00001076  2213                      88      move.l (a3), d1             ; Image Height
-00001078  4EB9 00001108             89      jsr ParseLittleEndianLong
-0000107E  2C01                      90      move.l d1, d6
-00001080                            91      
-00001080  3285                      92      move.w d5, (a1)             ; Push width & height to pixel grid
-00001082  5489                      93      add.l #2, a1
-00001084  3286                      94      move.w d6, (a1)
-00001086  5489                      95      add.l #2, a1                ; Offset to start of pixel data in pixel grid
-00001088                            96          
-00001088  5C8B                      97      add.l #$6, a3
-0000108A  3213                      98      move.w (a3), d1             ; ColorRange
-0000108C  E159                      99      rol.w #8, d1
-0000108E                           100  
-0000108E                           101  GetBitmapChunks:                ; Get the desired chunks of the bitmap
-0000108E                           102                                  ; Finding starting address
-0000108E  2006                     103      move.l d6, d0               ; Height (H)
-00001090  5380                     104      sub.l #1, d0                ; Sub by 1 to get column H - 1
-00001092  2205                     105      move.l d5, d1
-00001094  C0C1                     106      mulu.w d1, d0               ; Multiply by width to get last index of column CY - 1
-00001096                           107          
-00001096  2200                     108      move.l d0, d1               ; Storing in a separate variable so we can keep the index for other calculations
-00001098  E589                     109      lsl.l #2, d1                ; Multiply by size of each pixel (Long Word).
-0000109A  D284                     110      add.l d4, d1                ; Beginning of Pixel Array + Offset to Chunk Start
-0000109C  2041                     111      move.l d1, a0               ; Current Pixel Address
-0000109E                           112          
-0000109E                           113      ; Finding end-of-row index
-0000109E  D085                     114      add.l d5, d0                ; Add Chunk Width to push it to the end of the desired chunk's first row.
-000010A0  E588                     115      lsl.l #2, d0                ; Multiply by size of each pixel (Long Word).
-000010A2  D084                     116      add.l d4, d0                ; Beginning of Pixel Array + Offset to End-Of-Row
-000010A4  2440                     117      move.l d0, a2               ; End Of Row Pixel Address
-000010A6                           118          
-000010A6                           119      ; Finding ending address
-000010A6  2644                     120      move.l d4, a3   ; Represents the end row of the chunk's Address.
-000010A8                           121  
-000010A8                           122  GetSinglePixel:
-000010A8                           123      ; Get pixel data
-000010A8  2210                     124      move.l (a0), d1
-000010AA                           125          
-000010AA  4EB9 00001108            126      jsr ParseLittleEndianLong ; Convert to big endian
-000010B0  2001                     127      move.l d1, d0   ; Move back to d0 after conversion
-000010B2                           128         
-000010B2  2200                     129      move.l d0, d1   ; Red
-000010B4  E089                     130      lsr.l #8, d1    ; Red is the 3rd element, so we shift it 2 bytes over        
-000010B6  E089                     131      lsr.l #8, d1    ; Have to cut it in byte increments.
-000010B8  C2BC 000000FF            132      and.l #$FF, d1  ; Chopping off the channel bits that remain to the left.
-000010BE                           133      
-000010BE  2400                     134      move.l d0, d2   ; Green
-000010C0  E08A                     135      lsr.l #8, d2    ; Green is the 2nd element, so we shift it 1 byte.
-000010C2  C4BC 000000FF            136      and.l #$FF, d2  ; Chopping off the channel bits that remain to the left.
-000010C8                           137          
-000010C8  2600                     138      move.l d0, d3   ; Blue
-000010CA  C6BC 000000FF            139      and.l #$FF, d3  ; Chopping off the channel bits that remain to the left.
-000010D0                           140          
-000010D0                           141      ; Shift these bits to the correct location for when we read it in BGR
-000010D0  E18B                     142      lsl.l #8, d3    ; Blue is first, so we're shifting it to the 3rd byte
-000010D2  E18B                     143      lsl.l #8, d3
-000010D4                           144        
-000010D4  E18A                     145      lsl.l #8, d2    ; Green is next, which goes to the 2nd byte.
-000010D6                           146          
-000010D6                           147      ; Red stays in place, now we merge the three variables into one
-000010D6  C0BC FF000000            148      and.l #$FF000000, d0
-000010DC  8081                     149      or.l d1, d0
-000010DE  8082                     150      or.l d2, d0
-000010E0  8083                     151      or.l d3, d0
-000010E2                           152          
-000010E2                           153      ; Push to BitmapChunk location
-000010E2  2280                     154      move.l d0, (a1)
-000010E4                           155          
-000010E4                           156      ; Move Bitmap Chunk Pointer to next pixel
-000010E4  5889                     157      add.l #4, a1
-000010E6                           158          
-000010E6                           159      ; Move Pixel Array Pointer to the next pixel
-000010E6  5888                     160      add.l #4, a0            ; Move over 1 pixel
-000010E8  B5C8                     161      cmp.l a0, a2            ; Is current Pixel Array Pointer past End of Row?
-000010EA  6E00 FFBC                162      bgt.l GetSinglePixel    ; If not, continue the loop 
-000010EE                           163          
-000010EE                           164      ; If so, let's move the End of Row to the next row (backwards)
-000010EE  2005                     165      move.l d5, d0
-000010F0  E588                     166      lsl.l #2, d0    ; Multiply by size of each index
-000010F2  95C0                     167      sub.l d0, a2
-000010F4                           168          
-000010F4                           169      ; Let's also move the Current Pixel Address to the start of the next row.
-000010F4  2005                     170      move.l d5, d0           ; Move pointer back by 2xImageWidth
-000010F6  D085                     171      add.l d5, d0
-000010F8  E588                     172      lsl.l #2, d0
-000010FA  91C0                     173      sub.l d0, a0
-000010FC                           174          
-000010FC                           175      ; Have we passed the end of the chunk?
-000010FC  B7C8                     176      cmp.l a0, a3            ; Is Current Pixel Address past the index of End of Chunk index?
-000010FE  6F00 FFA8                177      ble.l GetSinglePixel    ; If not, continue the loop
-00001102                           178          
-00001102                           179      ; If so, we've finished sorting.
-00001102  4CDF 7FFF                180      movem.l (sp)+, ALL_REG  *| Pull registers from stack
-00001106                           181  
-00001106  4E75                     182      rts
-00001108                           183  
-00001108                           184  ParseLittleEndianLong:  ; Simple function to convert d1 LW from Little Endian to Big Endian
-00001108  E159                     185      rol.w #8, d1
-0000110A  4841                     186      swap d1
-0000110C  E159                     187      rol.w #8, d1
-0000110E                           188          
-0000110E  4E75                     189      rts
-00001110                           190  
-00001110                           191  
-00001110                           192  -------------------- end include --------------------
-00001110                           193      INCLUDE "./renderer.x68"      ; Handles printing sprites & affine transformations.
-00001110                           194  
-00001110                           195  r_PrintImage: 
-00001110  48E7 FFFE                196      movem.l ALL_REG, -(sp)  *| Push registers to stack
-00001114                           197  
-00001114                           198      *| Move starting variables to non-volatile positions
-00001114  2400                     199      move.l d0, d2           ; offset: vec2
-00001116  2010                     200      move.l (a0), d0         ; Image dimensions
-00001118                           201  
-00001118  B2BC 00000000            202      cmp.l #0, d1    ; Is this a sprite?
-0000111E  6700 0014                203      beq.l .LoadVarsToRegisters            ; If not, let's skip this step.
-00001122                           204      *| We need to store the offset: vec2 and image dimensions: vec2
-00001122                           205      *| for clearing next frame's data.
-00001122                           206      
-00001122  2279 00262EA2            207      move.l pixel_clear_length, a1
-00001128  2282                     208      move.l d2, (a1)  ; Move image offset to pixel_clear_zones
-0000112A  5889                     209      add.l #4, a1     ; Move to next word
-0000112C  2280                     210      move.l d0, (a1)  ; Move image dimensions to pixel_clear_zones
-0000112E  50B9 00262EA2            211      add.l #8, pixel_clear_length     ; Move to next word
-00001134                           212  
-00001134                           213  .LoadVarsToRegisters:
-00001134                           214  
-00001134                           215      *| Set up the starting variables for printing pixels
-00001134  2602                     216      move.l d2, d3
-00001136  E08B                     217      lsr.l #8, d3            ; Offset X
-00001138  E08B                     218      lsr.l #8, d3
-0000113A  C4BC 0000FFFF            219      and.l #$0000FFFF, d2    ; Offset Y
-00001140                           220         
-00001140  2200                     221      move.l d0, d1
-00001142  E088                     222      lsr.l #8, d0            ; Image Width (left word)
-00001144  E088                     223      lsr.l #8, d0
-00001146  2800                     224      move.l d0, d4           ; Store width in d4 to prevent destruction
-00001148  C2BC 0000FFFF            225      and.l #$0000FFFF, d1    ; Image Height (right word)
-0000114E                           226          
-0000114E  2A03                     227      move.l d3, d5           ; Start X Position
-00001150                           228      
-00001150  4286                     229      clr.l d6
-00001152  3C03                     230      move.w d3, d6           ; End X Position
-00001154  DC80                     231      add.l d0, d6
-00001156  5386                     232      sub.l #1, d6
-00001158                           233          
-00001158  4287                     234      clr.l d7
-0000115A  3E02                     235      move.w d2, d7           ; End Y Position
-0000115C  DE81                     236      add.l d1, d7
-0000115E  5387                     237      sub.l #1, d7
-00001160                           238      
-00001160  5888                     239      add.l #4, a0
-00001162                           240          
-00001162                           241  .PrintPixel:
-00001162  2210                     242      move.l (a0), d1             ; Get current pixel color
-00001164                           243  
-00001164  B2BC 00FFFFFF            244      cmp.l #$00FFFFFF, d1        ; Is pixel color transparent?
-0000116A  6300 0012                245      bls.l .NoPrint              ; If so, let's skip printing
-0000116E                           246      
-0000116E  7050                     247      move.l #SET_PIXEL_COLOR, d0 ; TRAP Set Pen Color
-00001170                           248  
-00001170  C2BC 00FFFFFF            249      and.l #$00FFFFFF, d1        ; Chop off alpha
-00001176                           250          
-00001176  4E4F                     251      TRAP #15
-00001178                           252                 
-00001178  7052                     253      move.l #PRINT_PIXEL, d0     ; TRAP Draw Pixel
-0000117A  2203                     254      move.l d3, d1               ; Pixel X location must be extracted 
-0000117C                           255     
-0000117C  4E4F                     256      TRAP #15
-0000117E                           257        
-0000117E                           258  .NoPrint:
-0000117E                           259      ; Calculate the next target pixel.
-0000117E  5888                     260      add.l #4, a0            ; Move pointer to next color pixel
-00001180                           261          
-00001180  5283                     262      add.l #1, d3            ; Move X to the next column
-00001182  B686                     263      cmp.l d6, d3            ; Is X past End X Position?
-00001184  6300 FFDC                264      bls.l .PrintPixel        ; If not, keep on printing
-00001188                           265          
-00001188                           266      ; Otherwise, we move to the next row
-00001188  9684                     267      sub.l d4, d3            ; Move X back to the starting column
-0000118A  5282                     268      add.l #1, d2            ; Move Y down a row
-0000118C                           269          
-0000118C  B487                     270      cmp.l d7, d2            ; Is Y past End Y Position?
-0000118E  6F00 FFD2                271      ble.l .PrintPixel         ; If not, keep printing.
-00001192                           272  
-00001192                           273  .Return:
-00001192                           274  
-00001192  4CDF 7FFF                275      movem.l (sp)+, ALL_REG  *| Pull registers from stack
-00001196                           276  
-00001196  4E75                     277      rts
-00001198                           278  
-00001198                           279  
-00001198                           280  r_ClearSprites:
-00001198  48E7 FFFE                281      movem.l ALL_REG, -(sp) *| Push registers to stack
-0000119C                           282  
-0000119C                           283  .LoadRegister:
-0000119C  207C 00262E02            284      move.l #pixel_clear_zones, a0    ; Current sprite index
-000011A2  2279 00262EA2            285      move.l (pixel_clear_length), a1   ; End sprite index
-000011A8  247C 001329BA            286      move.l #pg_Background, a2        ; Background
-000011AE                           287  
-000011AE                           288      ; Is pixel clear zones empty?
-000011AE  B3C8                     289      cmp.l a0, a1
-000011B0  6700 006E                290      beq.l .Return                ; If list is empty, simply return.
-000011B4                           291  
-000011B4                           292  .GetSprite:
-000011B4                           293      *| Extracting offset into registers for processing.
-000011B4  2610                     294      move.l (a0), d3                 ; offset: vec2
-000011B6                           295      
-000011B6  2403                     296      move.l d3, d2                   ; Separate into two registers
-000011B8                           297  
-000011B8  E08B                     298      lsr.l #8, d3                    ; Offset X: int
-000011BA  E08B                     299      lsr.l #8, d3                    ; Will be used as Current X for loop
-000011BC                           300  
-000011BC  C4BC 0000FFFF            301      and.l #$0000FFFF, d2            ; Offset Y: int
-000011C2                           302                                      ; Will be used as Current Y for loop
-000011C2                           303  
-000011C2                           304      *| Extracting dimensions to registers for processing
-000011C2  5888                     305      add.l #4, a0                    ; Push to next long
-000011C4  2810                     306      move.l (a0), d4                 ; dimensions: vec2
-000011C6  2A04                     307      move.l d4, d5                   ; Separate into two registers
-000011C8                           308  
-000011C8  E08C                     309      lsr.l #8, d4                    ; Width: int
-000011CA  E08C                     310      lsr.l #8, d4
-000011CC                           311  
-000011CC  CABC 0000FFFF            312      and.l #$0000FFFF, d5            ; Height: int
-000011D2                           313  
-000011D2                           314      *| Get ending x and y positions
-000011D2  2C03                     315      move.l d3, d6                   ; X Offset
-000011D4  DC84                     316      add.l d4, d6                    ; Plus Width
-000011D6                           317                                      ; = End X Pos
-000011D6                           318      
-000011D6  2E02                     319      move.l d2, d7                   ; Y Offset
-000011D8  DE85                     320      add.l d5, d7                    ; Plus Height
-000011DA                           321                                      ; = End Y Pos
-000011DA                           322  
-000011DA                           323  .ClearSprite:
-000011DA                           324      *,__________________________________________________,
-000011DA                           325      *| For Loop: for x = Offset X, x < Offset X + Width, x++
-000011DA                           326  .ClearPixel:
-000011DA                           327              *| Get Background Pixel
-000011DA  2202                     328              move.l d2, d1   ; Get offset to pixel address of background.
-000011DC  C2FC 0280                329              mulu.w #SCREEN_WIDTH, d1   ; multiplied by width
-000011E0  D283                     330              add.l d3, d1    ; plus X offset
-000011E2                           331              
-000011E2  5281                     332              add.l #1, d1    ; + 1 to account for dimension data in Pixel Grid 
-000011E4  E589                     333              lsl.l #2, d1    ; Multiplied by size of Long
-000011E6                           334  
-000011E6  264A                     335              move.l a2, a3   ; Add this to the address of the pixel grid
-000011E8  D7C1                     336              add.l d1, a3    ; Shifting offset to the desired pixel
-000011EA  2213                     337              move.l (a3), d1 ; Overwrite d1 to save register space
-000011EC                           338                              ; d1 now stores the hex color of the pixel
-000011EC                           339              
-000011EC                           340  .PrintBgPixel:
-000011EC                           341              *| Note that we set up the previous registers so all data
-000011EC                           342              *| is in the right location. X is in d3 but will be moved to d1
-000011EC                           343              *| once the first trap is done.
-000011EC  7050                     344              move.l #SET_PIXEL_COLOR, d0 ; TRAP Set Pen Color
-000011EE                           345                  
-000011EE                           346              ; TODO: Make backround have no alpha so we can remove this line
-000011EE  C2BC 00FFFFFF            347              and.l #$00FFFFFF, d1        ; Chop off alpha
-000011F4                           348  
-000011F4  4E4F                     349              TRAP #15
-000011F6                           350  
-000011F6  2203                     351              move.l d3, d1               ; Move X pos to correct register
-000011F8                           352                                          ; Y pos is already in correct register.   
-000011F8                           353                      
-000011F8  7052                     354              move.l #PRINT_PIXEL, d0     ; TRAP Draw Pixel
-000011FA                           355          
-000011FA  4E4F                     356              TRAP #15
-000011FC                           357  
-000011FC  5283                     358              add.l #1, d3    ; x += 1
-000011FE  B686                     359              cmp.l d6, d3    ; is x past end x pos?
-00001200  6F00 FFD8                360              ble.l .ClearPixel ; if not, continue parsing pixels
-00001204                           361      *| End For Loop
-00001204                           362  
-00001204  9684                     363      sub.l d4, d3    ; Move x back to start location
-00001206  5383                     364      sub.l #1, d3    ; - 1 for extra space moved past width.
-00001208                           365  
-00001208  5282                     366      add.l #1, d2    ; y += 1
-0000120A  B487                     367      cmp.l d7, d2    ; Is y past end Y pos?
-0000120C  6300 FFCC                368      bls.l .ClearSprite  ; If not, continue to next loop
-00001210                           369  
-00001210                           370  .CheckEndOfSprites:
-00001210  B3C8                     371      cmp.l a0, a1                    ; Is current sprite index at or past end sprite index?
-00001212  6300 FFA0                372      bls.l .GetSprite                ; If not, let's keep on going.
-00001216                           373  
-00001216                           374      ; If we're done, we reset the clear zones as we have emptied it out
-00001216  23FC 00262E02 00262EA2   375      move.l #pixel_clear_zones, pixel_clear_length
-00001220                           376  
-00001220                           377  .Return:
-00001220                           378  
-00001220  4CDF 7FFF                379      movem.l (sp)+, ALL_REG  *| Pull registers from stack
-00001224                           380  
-00001224  4E75                     381      rts
-00001226                           382  
-00001226                           383  SwapBuffer:
-00001226  2F00                     384      move.l d0, -(sp)
-00001228                           385      
-00001228  705E                     386      move.l #SWAP_BUFFER, d0
-0000122A                           387      
-0000122A  4E4F                     388      TRAP #15
-0000122C                           389  
-0000122C  201F                     390      move.l (sp)+, d0
-0000122E                           391  
-0000122E  4E75                     392      rts
-00001230                           393  
-00001230                           394  -------------------- end include --------------------
-00001230                           395      INCLUDE "./inputs.x68"        ; Handles player inputs for processing
-00001230                           396  
-00001230  =0000000D                397  ENTER               EQU $D
-00001230  =0000001B                398  ESC                 EQU $1B
-00001230  =00000010                399  SHIFT               EQU $10
-00001230  =00000020                400  SPACE               EQU $20
-00001230                           401  
-00001230                           402  i_CaptureInputs:
-00001230  48E7 C0E0                403      movem.l TRAP_REG, -(sp) *| Push registers to stack
-00001234                           404  
-00001234  7013                     405      move.l #GET_KEY_INPUT_COMMAND, d0
-00001236  223C 57415344            406      move.l #'W'<<24+'A'<<16+'S'<<8+'D', d1   ; WASD Inputs
-0000123C                           407      
-0000123C  4E4F                     408      TRAP #15
-0000123E                           409      
-0000123E  2601                     410      move.l d1, d3   ; d3 stores WASD Inputs for later processing
-00001240                           411      
-00001240  223C 0D1B1020            412      move.l #ENTER<<24+ESC<<16+SHIFT<<8+SPACE, d1   ; Enter, Esc, Shift, and Space Inputs
-00001246                           413      
-00001246  4E4F                     414      TRAP #15
-00001248                           415      
-00001248  2801                     416      move.l d1, d4   ; d4 stores other Inputs for later processing
-0000124A                           417      
-0000124A                           418  .Return:
-0000124A  4CDF 0703                419      movem.l (sp)+, TRAP_REG *| Pull registers from stack
-0000124E                           420  
-0000124E  4E75                     421      rts
-0000124E  4E75                     422  -------------------- end include --------------------
-00001250                           423  * INCLUDE "./gameplay.x68"      ; Handles in-game timer, lap counter, and game states
-00001250                           424      INCLUDE "./physics.x68"       ; Calculates player acceleration, velocity, and collisions.
-00001250                           425  
-00001250  =00030000                426  MAX_VELOCITY        EQU $00030000
-00001250  =01680000                427  FP_360              EQU $01680000   ; Hex value for 360 degrees in 16.16 fixed point
-00001250  =00168000                428  FP_22P5             EQU $00168000   ; Hex value for 22.5 degrees in 16.16 fixed point
-00001250  =000B4000                429  FP_11P25            EQU $000B4000   ; Hex value for 11.25 degrees in 16.16 fixed point
-00001250                           430  
-00001250  =00000100                431  ACCEL_AMOUNT        EQU $00000100   ; Increases speed at 0.125 pixels per frame 
-00001250  =00000100                432  DECEL_AMOUNT        EQU $00000100   ; Increases speed at 0.0625 pixels per frame 
-00001250                           433  
-00001250  =00001000                434  MAX_SPEED           EQU $00001000
-00001250                           435  
-00001250                           436  ph_CalculateRotation:
-00001250  48E7 C0E0                437      movem.l TRAP_REG, -(sp)  *| Push registers to stack
-00001254                           438  
-00001254  2003                     439      move.l d3, d0   ; Copying WASD inputs to extract A & D
-00001256  2200                     440      move.l d0, d1
-00001258                           441  
-00001258  E088                     442      lsr.l #8, d0            ; A key input
-0000125A  E088                     443      lsr.l #8, d0
-0000125C  C0BC 000000FF            444      and.l #$000000FF, d0    ; Chopping off W input
-00001262                           445  
-00001262  C2BC 000000FF            446      and.l #$000000FF, d1    ; D key input
-00001268                           447  
-00001268  B280                     448      cmp.l d0, d1            ; Are A & D both pressed or not pressed?
-0000126A  6700 004A                449      beq.l .Return           ; If so, let's skip to the end.
-0000126E                           450  
-0000126E                           451  .TurnLeft:
-0000126E  B0BC 00000000            452      cmp.l #0, d0
-00001274  6700 000E                453      beq.l .TurnRight
-00001278                           454  
-00001278  0482 00013880            455      sub.l #00080000, d2
-0000127E                           456  
-0000127E  4EF9 0000128A            457      jmp .FixAngle
-00001284                           458  
-00001284                           459  .TurnRight:
-00001284  0682 00013880            460      add.l #00080000, d2
-0000128A                           461      
-0000128A                           462  .FixAngle:
-0000128A  B4BC 01680000            463      cmp.l #FP_360, d2       ; Is d2 greater than 360?
-00001290  6E00 0012                464      bgt.l .AngleOver
-00001294  B4BC 00000000            465      cmp.l #0, d2            ; Is d2 negative?
-0000129A  6D00 0014                466      blt.l .AngleUnder
-0000129E                           467  
-0000129E  4EF9 000012B6            468      jmp .Return
-000012A4                           469  
-000012A4                           470  .AngleOver:
-000012A4  0482 01680000            471      sub.l #FP_360, d2          
-000012AA                           472  
-000012AA  4EF9 000012B6            473      jmp .Return
-000012B0                           474  
-000012B0                           475  .AngleUnder:
-000012B0  0682 01680000            476      add.l #FP_360, d2
-000012B6                           477  
-000012B6                           478  .Return
-000012B6  4CDF 0703                479      movem.l (sp)+, TRAP_REG  *| Pull registers from stack
-000012BA                           480  
-000012BA  4E75                     481      rts
-000012BC                           482  
-000012BC                           483  ph_SelectShipRotation:
-000012BC  48E7 C0E0                484      movem.l TRAP_REG, -(sp)  *| Push registers to stack
-000012C0                           485  
-000012C0  2002                     486      move.l d2, d0   ; Take angle to temporary variable
-000012C2  7200                     487      move.l #0, d1   ; d1 stores ship index
-000012C4  0480 000B4000            488      sub.l #FP_11P25, d0 ; Subtract angle by 11.25
-000012CA                           489  
-000012CA                           490  .NextRot:
-000012CA  5281                     491      add.l #1, d1        
-000012CC                           492  
-000012CC  0480 00168000            493      sub.l #FP_22P5, d0  ; Subtract angle by 11.25
-000012D2  B0BC 00000000            494      cmp.l #0, d0        ; Is angle under 0?
-000012D8  6C00 FFF0                495      bge.l .NextRot      ; If not, get next rotation
-000012DC                           496  
-000012DC                           497      ; We de-increment by 1 to go back to the desired index
-000012DC  5381                     498      sub.l #1, d1
-000012DE                           499  
-000012DE  B2BC 00000010            500      cmp.l #16, d1       ; Is d1 greater than 15?
-000012E4  6D00 0004                501      blt.l .GetFile      ; If not, we ignore the next step
-000012E8                           502  
-000012E8  7200                     503      move.l #0, d1       ; If we went past 15, we reset back to the first index
-000012EA                           504  
-000012EA                           505  .GetFile:
-000012EA  C2FC 0404                506      mulu.w #1028, d1     ; Multiply by size of ship's pixel grid
-000012EE  0681 0025E9BE            507      add.l #pg_ShipRotations, d1
-000012F4  2641                     508      move.l d1, a3
-000012F6                           509  
-000012F6                           510  .Return
-000012F6  4CDF 0703                511      movem.l (sp)+, TRAP_REG  *| Pull registers from stack
-000012FA                           512  
-000012FA  4E75                     513      rts
-000012FC                           514  
-000012FC                           515  ph_CalcVelMagnitude:
-000012FC  48E7 C0E0                516      movem.l TRAP_REG, -(sp)  *| Push registers to stack
-00001300                           517  
-00001300  2003                     518      move.l d3, d0           ; Copying WASD inputs to extract A & D
-00001302  2200                     519      move.l d0, d1
-00001304                           520  
-00001304  E088                     521      lsr.l #8, d0            ; W key input
-00001306  E088                     522      lsr.l #8, d0
-00001308  E088                     523      lsr.l #8, d0
-0000130A                           524  
-0000130A  E089                     525      lsr.l #8, d1            ; S key input
-0000130C  C2BC 000000FF            526      and.l #$000000FF, d1    
-00001312                           527  
-00001312  B280                     528      cmp.l d0, d1            ; Are S & S both pressed or not pressed?
-00001314  6700 0046                529      beq.l .Fric             ; If so, let's apply friction.
-00001318                           530  
-00001318  B0BC 00000000            531      cmp.l #0, d0            ; Are we accelerating?
-0000131E  6700 000E                532      beq.l .Decel            ; If not, then we must be decelerating. 
-00001322                           533  
-00001322                           534  .Accel: ; Move forwards
-00001322  0687 00000100            535      add.l #ACCEL_AMOUNT, d7 
-00001328                           536  
-00001328                           537      ; if boosting, add more?
-00001328                           538  
-00001328  4EF9 00001334            539      jmp .Clamp
-0000132E                           540  
-0000132E                           541  .Decel: ; Move backwards
-0000132E  0487 00000100            542      sub.l #DECEL_AMOUNT, d7 
-00001334                           543  
-00001334                           544  .Clamp:
-00001334                           545  .ClampMin:
-00001334  BEBC 00000000            546      cmp.l #0, d7    
-0000133A  6C00 000A                547      bge.l .ClampMax
-0000133E                           548  
-0000133E  7E00                     549      move.l #0, d7
-00001340                           550  
-00001340  4EF9 0000136A            551      jmp .Return
-00001346                           552  
-00001346                           553  .ClampMax:
-00001346  BEBC 00001000            554      cmp.l #MAX_SPEED, d7
-0000134C  6F00 001C                555      ble.l .Return
-00001350                           556  
-00001350  2E3C 00001000            557      move.l #MAX_SPEED, d7
-00001356                           558  
-00001356  4EF9 0000136A            559      jmp .Return
-0000135C                           560  
-0000135C                           561  .Fric:  ; Return to 0 over time while not boosting
-0000135C  E387                     562      asl.l #1, d7
-0000135E  BEBC FFFFFFFF            563      cmp.l #$FFFFFFFF, d7    ; Is d7 at its lowest possible value?
-00001364  6600 0004                564      bne.l .Return           ; If not, skip this next step
-00001368                           565  
-00001368  7E00                     566      move.l #0, d7           ; Return to 0 rather than being stuck at almost -0
+00001000  =0000005E                 34  SWAP_BUFFER         EQU 94
+00001000                            35  
+00001000                            36  *| 7 Segment Stuff
+00001000  =0012001F                 37  SEVEN_SEG_DIMENSIONS    EQU $0012001F
+00001000                            38  
+00001000                            39  *,__________________________________________________,
+00001000                            40  *| Includes
+00001000                            41      INCLUDE "./file_loader.x68"   ; Handles loading of files during preload phase
+00001000                            42  
+00001000  =0000048A                 43  SHIP_BMP_SIZE       EQU 1162    ; The number of bytes betwen each ship file
+00001000  =00000404                 44  SHIP_PG_SIZE        EQU 1028     ; The size of a ship sprite in memory
+00001000                            45  
+00001000                            46  fl_LoadFiles:
+00001000                            47      *| LoadBitmap(a0=file_root: bitmap*, a1=output_image: pixel_grid*)
+00001000  207C 000020FA             48      move.l #BackgroundBmpFile, a0   *| file_root
+00001006  227C 00132A24             49      move.l #pg_Background, a1       *| output_image
+0000100C  4EB9 00001068             50      jsr fl_LoadBitmap
+00001012                            51  
+00001012                            52      *| LoadBitmap(a0=file_root: bitmap*, a1=output_image: pixel_grid*)
+00001012  207C 00001794             53      move.l #SevenSegVerticalBmpFile, a0   *| file_root
+00001018  227C 00262F10             54      move.l #pg_7SegVertical, a1       *| output_image
+0000101E  4EB9 00001068             55      jsr fl_LoadBitmap
+00001024                            56  
+00001024                            57      *| LoadBitmap(a0=file_root: bitmap*, a1=output_image: pixel_grid*)
+00001024  207C 000018AE             58      move.l #SevenSegHorizontalBmpFile, a0   *| file_root
+0000102A  227C 00263014             59      move.l #pg_7SegHorizontal, a1       *| output_image
+00001030  4EB9 00001068             60      jsr fl_LoadBitmap
+00001036                            61  
+00001036  4EB9 0000103E             62      jsr fl_LoadShipRotations
+0000103C                            63      
+0000103C  4E75                      64      rts
+0000103E                            65  
+0000103E                            66  fl_LoadShipRotations:
+0000103E  207C 0012E184             67      move.l #ShipBmpFiles, a0
+00001044  227C 0025EA28             68      move.l #pg_ShipRotations, a1
+0000104A                            69  
+0000104A                            70  .LoadBmp:
+0000104A  4EB9 00001068             71      jsr fl_LoadBitmap
+00001050                            72  
+00001050  D1FC 0000048A             73      add.l #SHIP_BMP_SIZE, a0
+00001056  D3FC 00000404             74      add.l #SHIP_PG_SIZE, a1
+0000105C                            75  
+0000105C  B1FC 00132A24             76      cmp.l #EndShipBmpFiles, a0  ; Are we past the end?
+00001062  6D00 FFE6                 77      blt.l .LoadBmp              ; If not, keep on loading.
+00001066                            78  
+00001066  4E75                      79      rts
+00001068                            80  
+00001068                            81  fl_LoadBitmap:
+00001068  48E7 FFFE                 82      movem.l ALL_REG, -(sp) *| Push registers to stack
+0000106C                            83  
+0000106C                            84  ParseBitmapHeader: ; Gather essential information from the bitmap's header
+0000106C                            85      ; This will need to be converted to Big Endian later based on the Color Range
+0000106C  2648                      86      move.l a0, a3
+0000106E  D7FC 0000000A             87      add.l #$A, a3               ; Offset to pixel array
+00001074  2213                      88      move.l (a3), d1
+00001076                            89          
+00001076  4EB9 0000112C             90      jsr ParseLittleEndianLong
+0000107C                            91          
+0000107C  D288                      92      add.l a0, d1
+0000107E  2801                      93      move.l d1, d4               ; Offset to Pixel Array
+00001080                            94          
+00001080  2648                      95      move.l a0, a3
+00001082  D7FC 00000012             96      add.l #$12, a3              ; Offset to image width
+00001088  2213                      97      move.l (a3), d1             ; Image Width
+0000108A  4EB9 0000112C             98      jsr ParseLittleEndianLong
+00001090  2A01                      99      move.l d1, d5
+00001092                           100          
+00001092  2648                     101      move.l a0, a3
+00001094  D7FC 00000016            102      add.l #$16, a3              ; Offset to image height
+0000109A  2213                     103      move.l (a3), d1             ; Image Height
+0000109C  4EB9 0000112C            104      jsr ParseLittleEndianLong
+000010A2  2C01                     105      move.l d1, d6
+000010A4                           106      
+000010A4  3285                     107      move.w d5, (a1)             ; Push width & height to pixel grid
+000010A6  5489                     108      add.l #2, a1
+000010A8  3286                     109      move.w d6, (a1)
+000010AA  5489                     110      add.l #2, a1                ; Offset to start of pixel data in pixel grid
+000010AC                           111          
+000010AC  5C8B                     112      add.l #$6, a3
+000010AE  3213                     113      move.w (a3), d1             ; ColorRange
+000010B0  E159                     114      rol.w #8, d1
+000010B2                           115  
+000010B2                           116  GetBitmapChunks:                ; Get the desired chunks of the bitmap
+000010B2                           117                                  ; Finding starting address
+000010B2  2006                     118      move.l d6, d0               ; Height (H)
+000010B4  5380                     119      sub.l #1, d0                ; Sub by 1 to get column H - 1
+000010B6  2205                     120      move.l d5, d1
+000010B8  C0C1                     121      mulu.w d1, d0               ; Multiply by width to get last index of column CY - 1
+000010BA                           122          
+000010BA  2200                     123      move.l d0, d1               ; Storing in a separate variable so we can keep the index for other calculations
+000010BC  E589                     124      lsl.l #2, d1                ; Multiply by size of each pixel (Long Word).
+000010BE  D284                     125      add.l d4, d1                ; Beginning of Pixel Array + Offset to Chunk Start
+000010C0  2041                     126      move.l d1, a0               ; Current Pixel Address
+000010C2                           127          
+000010C2                           128      ; Finding end-of-row index
+000010C2  D085                     129      add.l d5, d0                ; Add Chunk Width to push it to the end of the desired chunk's first row.
+000010C4  E588                     130      lsl.l #2, d0                ; Multiply by size of each pixel (Long Word).
+000010C6  D084                     131      add.l d4, d0                ; Beginning of Pixel Array + Offset to End-Of-Row
+000010C8  2440                     132      move.l d0, a2               ; End Of Row Pixel Address
+000010CA                           133          
+000010CA                           134      ; Finding ending address
+000010CA  2644                     135      move.l d4, a3   ; Represents the end row of the chunk's Address.
+000010CC                           136  
+000010CC                           137  GetSinglePixel:
+000010CC                           138      ; Get pixel data
+000010CC  2210                     139      move.l (a0), d1
+000010CE                           140          
+000010CE  4EB9 0000112C            141      jsr ParseLittleEndianLong ; Convert to big endian
+000010D4  2001                     142      move.l d1, d0   ; Move back to d0 after conversion
+000010D6                           143         
+000010D6  2200                     144      move.l d0, d1   ; Red
+000010D8  E089                     145      lsr.l #8, d1    ; Red is the 3rd element, so we shift it 2 bytes over        
+000010DA  E089                     146      lsr.l #8, d1    ; Have to cut it in byte increments.
+000010DC  C2BC 000000FF            147      and.l #$FF, d1  ; Chopping off the channel bits that remain to the left.
+000010E2                           148      
+000010E2  2400                     149      move.l d0, d2   ; Green
+000010E4  E08A                     150      lsr.l #8, d2    ; Green is the 2nd element, so we shift it 1 byte.
+000010E6  C4BC 000000FF            151      and.l #$FF, d2  ; Chopping off the channel bits that remain to the left.
+000010EC                           152          
+000010EC  2600                     153      move.l d0, d3   ; Blue
+000010EE  C6BC 000000FF            154      and.l #$FF, d3  ; Chopping off the channel bits that remain to the left.
+000010F4                           155          
+000010F4                           156      ; Shift these bits to the correct location for when we read it in BGR
+000010F4  E18B                     157      lsl.l #8, d3    ; Blue is first, so we're shifting it to the 3rd byte
+000010F6  E18B                     158      lsl.l #8, d3
+000010F8                           159        
+000010F8  E18A                     160      lsl.l #8, d2    ; Green is next, which goes to the 2nd byte.
+000010FA                           161          
+000010FA                           162      ; Red stays in place, now we merge the three variables into one
+000010FA  C0BC FF000000            163      and.l #$FF000000, d0
+00001100  8081                     164      or.l d1, d0
+00001102  8082                     165      or.l d2, d0
+00001104  8083                     166      or.l d3, d0
+00001106                           167          
+00001106                           168      ; Push to BitmapChunk location
+00001106  2280                     169      move.l d0, (a1)
+00001108                           170          
+00001108                           171      ; Move Bitmap Chunk Pointer to next pixel
+00001108  5889                     172      add.l #4, a1
+0000110A                           173          
+0000110A                           174      ; Move Pixel Array Pointer to the next pixel
+0000110A  5888                     175      add.l #4, a0            ; Move over 1 pixel
+0000110C  B5C8                     176      cmp.l a0, a2            ; Is current Pixel Array Pointer past End of Row?
+0000110E  6E00 FFBC                177      bgt.l GetSinglePixel    ; If not, continue the loop 
+00001112                           178          
+00001112                           179      ; If so, let's move the End of Row to the next row (backwards)
+00001112  2005                     180      move.l d5, d0
+00001114  E588                     181      lsl.l #2, d0    ; Multiply by size of each index
+00001116  95C0                     182      sub.l d0, a2
+00001118                           183          
+00001118                           184      ; Let's also move the Current Pixel Address to the start of the next row.
+00001118  2005                     185      move.l d5, d0           ; Move pointer back by 2xImageWidth
+0000111A  D085                     186      add.l d5, d0
+0000111C  E588                     187      lsl.l #2, d0
+0000111E  91C0                     188      sub.l d0, a0
+00001120                           189          
+00001120                           190      ; Have we passed the end of the chunk?
+00001120  B7C8                     191      cmp.l a0, a3            ; Is Current Pixel Address past the index of End of Chunk index?
+00001122  6F00 FFA8                192      ble.l GetSinglePixel    ; If not, continue the loop
+00001126                           193          
+00001126                           194      ; If so, we've finished sorting.
+00001126  4CDF 7FFF                195      movem.l (sp)+, ALL_REG  *| Pull registers from stack
+0000112A                           196  
+0000112A  4E75                     197      rts
+0000112C                           198  
+0000112C                           199  ParseLittleEndianLong:  ; Simple function to convert d1 LW from Little Endian to Big Endian
+0000112C  E159                     200      rol.w #8, d1
+0000112E  4841                     201      swap d1
+00001130  E159                     202      rol.w #8, d1
+00001132                           203          
+00001132  4E75                     204      rts
+00001134                           205  
+00001134                           206  
+00001134                           207  -------------------- end include --------------------
+00001134                           208      INCLUDE "./renderer.x68"      ; Handles printing sprites & affine transformations.
+00001134                           209  
+00001134                           210  r_PrintImage: 
+00001134  48E7 FFFE                211      movem.l ALL_REG, -(sp)  *| Push registers to stack
+00001138                           212  
+00001138                           213      *| Move starting variables to non-volatile positions
+00001138  2400                     214      move.l d0, d2           ; offset: vec2
+0000113A  2010                     215      move.l (a0), d0         ; Image dimensions
+0000113C                           216  
+0000113C  B2BC 00000000            217      cmp.l #0, d1    ; Is this a sprite?
+00001142  6700 0014                218      beq.l .LoadVarsToRegisters            ; If not, let's skip this step.
+00001146                           219      *| We need to store the offset: vec2 and image dimensions: vec2
+00001146                           220      *| for clearing next frame's data.
+00001146                           221      
+00001146  2279 00262F0C            222      move.l pixel_clear_length, a1
+0000114C  2282                     223      move.l d2, (a1)  ; Move image offset to pixel_clear_zones
+0000114E  5889                     224      add.l #4, a1     ; Move to next word
+00001150  2280                     225      move.l d0, (a1)  ; Move image dimensions to pixel_clear_zones
+00001152  50B9 00262F0C            226      add.l #8, pixel_clear_length     ; Move to next word
+00001158                           227  
+00001158                           228  .LoadVarsToRegisters:
+00001158                           229  
+00001158                           230      *| Set up the starting variables for printing pixels
+00001158  2602                     231      move.l d2, d3
+0000115A  E08B                     232      lsr.l #8, d3            ; Offset X
+0000115C  E08B                     233      lsr.l #8, d3
+0000115E  C4BC 0000FFFF            234      and.l #$0000FFFF, d2    ; Offset Y
+00001164                           235         
+00001164  2200                     236      move.l d0, d1
+00001166  E088                     237      lsr.l #8, d0            ; Image Width (left word)
+00001168  E088                     238      lsr.l #8, d0
+0000116A  2800                     239      move.l d0, d4           ; Store width in d4 to prevent destruction
+0000116C  C2BC 0000FFFF            240      and.l #$0000FFFF, d1    ; Image Height (right word)
+00001172                           241          
+00001172  2A03                     242      move.l d3, d5           ; Start X Position
+00001174                           243      
+00001174  4286                     244      clr.l d6
+00001176  3C03                     245      move.w d3, d6           ; End X Position
+00001178  DC80                     246      add.l d0, d6
+0000117A  5386                     247      sub.l #1, d6
+0000117C                           248          
+0000117C  4287                     249      clr.l d7
+0000117E  3E02                     250      move.w d2, d7           ; End Y Position
+00001180  DE81                     251      add.l d1, d7
+00001182  5387                     252      sub.l #1, d7
+00001184                           253      
+00001184  5888                     254      add.l #4, a0
+00001186                           255          
+00001186                           256  .PrintPixel:
+00001186  2210                     257      move.l (a0), d1             ; Get current pixel color
+00001188                           258  
+00001188  B2BC 00FFFFFF            259      cmp.l #$00FFFFFF, d1        ; Is pixel color transparent?
+0000118E  6300 0012                260      bls.l .NoPrint              ; If so, let's skip printing
+00001192                           261      
+00001192  7050                     262      move.l #SET_PIXEL_COLOR, d0 ; TRAP Set Pen Color
+00001194                           263  
+00001194  C2BC 00FFFFFF            264      and.l #$00FFFFFF, d1        ; Chop off alpha
+0000119A                           265          
+0000119A  4E4F                     266      TRAP #15
+0000119C                           267                 
+0000119C  7052                     268      move.l #PRINT_PIXEL, d0     ; TRAP Draw Pixel
+0000119E  2203                     269      move.l d3, d1               ; Pixel X location must be extracted 
+000011A0                           270     
+000011A0  4E4F                     271      TRAP #15
+000011A2                           272        
+000011A2                           273  .NoPrint:
+000011A2                           274      ; Calculate the next target pixel.
+000011A2  5888                     275      add.l #4, a0            ; Move pointer to next color pixel
+000011A4                           276          
+000011A4  5283                     277      add.l #1, d3            ; Move X to the next column
+000011A6  B686                     278      cmp.l d6, d3            ; Is X past End X Position?
+000011A8  6300 FFDC                279      bls.l .PrintPixel        ; If not, keep on printing
+000011AC                           280          
+000011AC                           281      ; Otherwise, we move to the next row
+000011AC  9684                     282      sub.l d4, d3            ; Move X back to the starting column
+000011AE  5282                     283      add.l #1, d2            ; Move Y down a row
+000011B0                           284          
+000011B0  B487                     285      cmp.l d7, d2            ; Is Y past End Y Position?
+000011B2  6F00 FFD2                286      ble.l .PrintPixel         ; If not, keep printing.
+000011B6                           287  
+000011B6                           288  .Return:
+000011B6                           289  
+000011B6  4CDF 7FFF                290      movem.l (sp)+, ALL_REG  *| Pull registers from stack
+000011BA                           291  
+000011BA  4E75                     292      rts
+000011BC                           293  
+000011BC                           294  
+000011BC                           295  r_ClearSprites:
+000011BC  48E7 FFFE                296      movem.l ALL_REG, -(sp) *| Push registers to stack
+000011C0                           297  
+000011C0                           298  .LoadRegister:
+000011C0  207C 00262E6C            299      move.l #pixel_clear_zones, a0    ; Current sprite index
+000011C6  2279 00262F0C            300      move.l (pixel_clear_length), a1   ; End sprite index
+000011CC  247C 00132A24            301      move.l #pg_Background, a2        ; Background
+000011D2                           302  
+000011D2                           303      ; Is pixel clear zones empty?
+000011D2  B3C8                     304      cmp.l a0, a1
+000011D4  6700 006E                305      beq.l .Return                ; If list is empty, simply return.
+000011D8                           306  
+000011D8                           307  .GetSprite:
+000011D8                           308      *| Extracting offset into registers for processing.
+000011D8  2610                     309      move.l (a0), d3                 ; offset: vec2
+000011DA                           310      
+000011DA  2403                     311      move.l d3, d2                   ; Separate into two registers
+000011DC                           312  
+000011DC  E08B                     313      lsr.l #8, d3                    ; Offset X: int
+000011DE  E08B                     314      lsr.l #8, d3                    ; Will be used as Current X for loop
+000011E0                           315  
+000011E0  C4BC 0000FFFF            316      and.l #$0000FFFF, d2            ; Offset Y: int
+000011E6                           317                                      ; Will be used as Current Y for loop
+000011E6                           318  
+000011E6                           319      *| Extracting dimensions to registers for processing
+000011E6  5888                     320      add.l #4, a0                    ; Push to next long
+000011E8  2810                     321      move.l (a0), d4                 ; dimensions: vec2
+000011EA  2A04                     322      move.l d4, d5                   ; Separate into two registers
+000011EC                           323  
+000011EC  E08C                     324      lsr.l #8, d4                    ; Width: int
+000011EE  E08C                     325      lsr.l #8, d4
+000011F0                           326  
+000011F0  CABC 0000FFFF            327      and.l #$0000FFFF, d5            ; Height: int
+000011F6                           328  
+000011F6                           329      *| Get ending x and y positions
+000011F6  2C03                     330      move.l d3, d6                   ; X Offset
+000011F8  DC84                     331      add.l d4, d6                    ; Plus Width
+000011FA                           332                                      ; = End X Pos
+000011FA                           333      
+000011FA  2E02                     334      move.l d2, d7                   ; Y Offset
+000011FC  DE85                     335      add.l d5, d7                    ; Plus Height
+000011FE                           336                                      ; = End Y Pos
+000011FE                           337  
+000011FE                           338  .ClearSprite:
+000011FE                           339      *,__________________________________________________,
+000011FE                           340      *| For Loop: for x = Offset X, x < Offset X + Width, x++
+000011FE                           341  .ClearPixel:
+000011FE                           342              *| Get Background Pixel
+000011FE  2202                     343              move.l d2, d1   ; Get offset to pixel address of background.
+00001200  C2FC 0280                344              mulu.w #SCREEN_WIDTH, d1   ; multiplied by width
+00001204  D283                     345              add.l d3, d1    ; plus X offset
+00001206                           346              
+00001206  5281                     347              add.l #1, d1    ; + 1 to account for dimension data in Pixel Grid 
+00001208  E589                     348              lsl.l #2, d1    ; Multiplied by size of Long
+0000120A                           349  
+0000120A  264A                     350              move.l a2, a3   ; Add this to the address of the pixel grid
+0000120C  D7C1                     351              add.l d1, a3    ; Shifting offset to the desired pixel
+0000120E  2213                     352              move.l (a3), d1 ; Overwrite d1 to save register space
+00001210                           353                              ; d1 now stores the hex color of the pixel
+00001210                           354              
+00001210                           355  .PrintBgPixel:
+00001210                           356              *| Note that we set up the previous registers so all data
+00001210                           357              *| is in the right location. X is in d3 but will be moved to d1
+00001210                           358              *| once the first trap is done.
+00001210  7050                     359              move.l #SET_PIXEL_COLOR, d0 ; TRAP Set Pen Color
+00001212                           360                  
+00001212                           361              ; TODO: Make backround have no alpha so we can remove this line
+00001212  C2BC 00FFFFFF            362              and.l #$00FFFFFF, d1        ; Chop off alpha
+00001218                           363  
+00001218  4E4F                     364              TRAP #15
+0000121A                           365  
+0000121A  2203                     366              move.l d3, d1               ; Move X pos to correct register
+0000121C                           367                                          ; Y pos is already in correct register.   
+0000121C                           368                      
+0000121C  7052                     369              move.l #PRINT_PIXEL, d0     ; TRAP Draw Pixel
+0000121E                           370          
+0000121E  4E4F                     371              TRAP #15
+00001220                           372  
+00001220  5283                     373              add.l #1, d3    ; x += 1
+00001222  B686                     374              cmp.l d6, d3    ; is x past end x pos?
+00001224  6F00 FFD8                375              ble.l .ClearPixel ; if not, continue parsing pixels
+00001228                           376      *| End For Loop
+00001228                           377  
+00001228  9684                     378      sub.l d4, d3    ; Move x back to start location
+0000122A  5383                     379      sub.l #1, d3    ; - 1 for extra space moved past width.
+0000122C                           380  
+0000122C  5282                     381      add.l #1, d2    ; y += 1
+0000122E  B487                     382      cmp.l d7, d2    ; Is y past end Y pos?
+00001230  6300 FFCC                383      bls.l .ClearSprite  ; If not, continue to next loop
+00001234                           384  
+00001234                           385  .CheckEndOfSprites:
+00001234  B3C8                     386      cmp.l a0, a1                    ; Is current sprite index at or past end sprite index?
+00001236  6300 FFA0                387      bls.l .GetSprite                ; If not, let's keep on going.
+0000123A                           388  
+0000123A                           389      ; If we're done, we reset the clear zones as we have emptied it out
+0000123A  23FC 00262E6C 00262F0C   390      move.l #pixel_clear_zones, pixel_clear_length
+00001244                           391  
+00001244                           392  .Return:
+00001244                           393  
+00001244  4CDF 7FFF                394      movem.l (sp)+, ALL_REG  *| Pull registers from stack
+00001248                           395  
+00001248  4E75                     396      rts
+0000124A                           397  
+0000124A                           398  SwapBuffer:
+0000124A  2F00                     399      move.l d0, -(sp)
+0000124C                           400      
+0000124C  705E                     401      move.l #SWAP_BUFFER, d0
+0000124E                           402      
+0000124E  4E4F                     403      TRAP #15
+00001250                           404  
+00001250  201F                     405      move.l (sp)+, d0
+00001252                           406  
+00001252  4E75                     407      rts
+00001254                           408  
+00001254                           409  -------------------- end include --------------------
+00001254                           410      INCLUDE "./inputs.x68"        ; Handles player inputs for processing
+00001254                           411  
+00001254  =0000000D                412  ENTER               EQU $D
+00001254  =0000001B                413  ESC                 EQU $1B
+00001254  =00000010                414  SHIFT               EQU $10
+00001254  =00000020                415  SPACE               EQU $20
+00001254                           416  
+00001254                           417  i_CaptureInputs:
+00001254  48E7 C0E0                418      movem.l TRAP_REG, -(sp) *| Push registers to stack
+00001258                           419  
+00001258  7013                     420      move.l #GET_KEY_INPUT_COMMAND, d0
+0000125A  223C 57415344            421      move.l #'W'<<24+'A'<<16+'S'<<8+'D', d1   ; WASD Inputs
+00001260                           422      
+00001260  4E4F                     423      TRAP #15
+00001262                           424      
+00001262  2601                     425      move.l d1, d3   ; d3 stores WASD Inputs for later processing
+00001264                           426      
+00001264  223C 0D1B1020            427      move.l #ENTER<<24+ESC<<16+SHIFT<<8+SPACE, d1   ; Enter, Esc, Shift, and Space Inputs
+0000126A                           428      
+0000126A  4E4F                     429      TRAP #15
+0000126C                           430      
+0000126C  2801                     431      move.l d1, d4   ; d4 stores other Inputs for later processing
+0000126E                           432      
+0000126E                           433  .Return:
+0000126E  4CDF 0703                434      movem.l (sp)+, TRAP_REG *| Pull registers from stack
+00001272                           435  
+00001272  4E75                     436      rts
+00001272  4E75                     437  -------------------- end include --------------------
+00001274                           438  * INCLUDE "./gameplay.x68"        ; Handles in-game timer, lap counter, and game states
+00001274                           439      INCLUDE "./physics.x68"       ; Calculates player acceleration, velocity, and collisions.
+00001274                           440  
+00001274  =00030000                441  MAX_VELOCITY        EQU $00030000
+00001274  =01680000                442  FP_360              EQU $01680000   ; Hex value for 360 degrees in 16.16 fixed point
+00001274  =00168000                443  FP_22P5             EQU $00168000   ; Hex value for 22.5 degrees in 16.16 fixed point
+00001274  =000B4000                444  FP_11P25            EQU $000B4000   ; Hex value for 11.25 degrees in 16.16 fixed point
+00001274                           445  
+00001274  =00000100                446  ACCEL_AMOUNT        EQU $00000100   ; Increases speed at 0.125 pixels per frame 
+00001274  =00000100                447  DECEL_AMOUNT        EQU $00000100   ; Increases speed at 0.0625 pixels per frame 
+00001274                           448  
+00001274  =00001000                449  MAX_SPEED           EQU $00001000
+00001274                           450  
+00001274                           451  ph_CalculateRotation:
+00001274  48E7 C0E0                452      movem.l TRAP_REG, -(sp)  *| Push registers to stack
+00001278                           453  
+00001278  2003                     454      move.l d3, d0   ; Copying WASD inputs to extract A & D
+0000127A  2200                     455      move.l d0, d1
+0000127C                           456  
+0000127C  E088                     457      lsr.l #8, d0            ; A key input
+0000127E  E088                     458      lsr.l #8, d0
+00001280  C0BC 000000FF            459      and.l #$000000FF, d0    ; Chopping off W input
+00001286                           460  
+00001286  C2BC 000000FF            461      and.l #$000000FF, d1    ; D key input
+0000128C                           462  
+0000128C  B280                     463      cmp.l d0, d1            ; Are A & D both pressed or not pressed?
+0000128E  6700 004A                464      beq.l .Return           ; If so, let's skip to the end.
+00001292                           465  
+00001292                           466  .TurnLeft:
+00001292  B0BC 00000000            467      cmp.l #0, d0
+00001298  6700 000E                468      beq.l .TurnRight
+0000129C                           469  
+0000129C  0482 00013880            470      sub.l #00080000, d2
+000012A2                           471  
+000012A2  4EF9 000012AE            472      jmp .FixAngle
+000012A8                           473  
+000012A8                           474  .TurnRight:
+000012A8  0682 00013880            475      add.l #00080000, d2
+000012AE                           476      
+000012AE                           477  .FixAngle:
+000012AE  B4BC 01680000            478      cmp.l #FP_360, d2       ; Is d2 greater than 360?
+000012B4  6E00 0012                479      bgt.l .AngleOver
+000012B8  B4BC 00000000            480      cmp.l #0, d2            ; Is d2 negative?
+000012BE  6D00 0014                481      blt.l .AngleUnder
+000012C2                           482  
+000012C2  4EF9 000012DA            483      jmp .Return
+000012C8                           484  
+000012C8                           485  .AngleOver:
+000012C8  0482 01680000            486      sub.l #FP_360, d2          
+000012CE                           487  
+000012CE  4EF9 000012DA            488      jmp .Return
+000012D4                           489  
+000012D4                           490  .AngleUnder:
+000012D4  0682 01680000            491      add.l #FP_360, d2
+000012DA                           492  
+000012DA                           493  .Return
+000012DA  4CDF 0703                494      movem.l (sp)+, TRAP_REG  *| Pull registers from stack
+000012DE                           495  
+000012DE  4E75                     496      rts
+000012E0                           497  
+000012E0                           498  ph_SelectShipRotation:
+000012E0  48E7 C0E0                499      movem.l TRAP_REG, -(sp)  *| Push registers to stack
+000012E4                           500  
+000012E4  2002                     501      move.l d2, d0   ; Take angle to temporary variable
+000012E6  7200                     502      move.l #0, d1   ; d1 stores ship index
+000012E8  0480 000B4000            503      sub.l #FP_11P25, d0 ; Subtract angle by 11.25
+000012EE                           504  
+000012EE                           505  .NextRot:
+000012EE  5281                     506      add.l #1, d1        
+000012F0                           507  
+000012F0  0480 00168000            508      sub.l #FP_22P5, d0  ; Subtract angle by 11.25
+000012F6  B0BC 00000000            509      cmp.l #0, d0        ; Is angle under 0?
+000012FC  6C00 FFF0                510      bge.l .NextRot      ; If not, get next rotation
+00001300                           511  
+00001300                           512      ; We de-increment by 1 to go back to the desired index
+00001300  5381                     513      sub.l #1, d1
+00001302                           514  
+00001302  B2BC 00000010            515      cmp.l #16, d1       ; Is d1 greater than 15?
+00001308  6D00 0004                516      blt.l .GetFile      ; If not, we ignore the next step
+0000130C                           517  
+0000130C  7200                     518      move.l #0, d1       ; If we went past 15, we reset back to the first index
+0000130E                           519  
+0000130E                           520  .GetFile:
+0000130E  C2FC 0404                521      mulu.w #1028, d1     ; Multiply by size of ship's pixel grid
+00001312  0681 0025EA28            522      add.l #pg_ShipRotations, d1
+00001318  2641                     523      move.l d1, a3
+0000131A                           524  
+0000131A                           525  .Return
+0000131A  4CDF 0703                526      movem.l (sp)+, TRAP_REG  *| Pull registers from stack
+0000131E                           527  
+0000131E  4E75                     528      rts
+00001320                           529  
+00001320                           530  ph_CalcVelMagnitude:
+00001320  48E7 C0E0                531      movem.l TRAP_REG, -(sp)  *| Push registers to stack
+00001324                           532  
+00001324  2003                     533      move.l d3, d0           ; Copying WASD inputs to extract A & D
+00001326  2200                     534      move.l d0, d1
+00001328                           535  
+00001328  E088                     536      lsr.l #8, d0            ; W key input
+0000132A  E088                     537      lsr.l #8, d0
+0000132C  E088                     538      lsr.l #8, d0
+0000132E                           539  
+0000132E  E089                     540      lsr.l #8, d1            ; S key input
+00001330  C2BC 000000FF            541      and.l #$000000FF, d1    
+00001336                           542  
+00001336  B280                     543      cmp.l d0, d1            ; Are S & S both pressed or not pressed?
+00001338  6700 0046                544      beq.l .Fric             ; If so, let's apply friction.
+0000133C                           545  
+0000133C  B0BC 00000000            546      cmp.l #0, d0            ; Are we accelerating?
+00001342  6700 000E                547      beq.l .Decel            ; If not, then we must be decelerating. 
+00001346                           548  
+00001346                           549  .Accel: ; Move forwards
+00001346  0687 00000100            550      add.l #ACCEL_AMOUNT, d7 
+0000134C                           551  
+0000134C                           552      ; if boosting, add more?
+0000134C                           553  
+0000134C  4EF9 00001358            554      jmp .Clamp
+00001352                           555  
+00001352                           556  .Decel: ; Move backwards
+00001352  0487 00000100            557      sub.l #DECEL_AMOUNT, d7 
+00001358                           558  
+00001358                           559  .Clamp:
+00001358                           560  .ClampMin:
+00001358  BEBC 00000000            561      cmp.l #0, d7    
+0000135E  6C00 000A                562      bge.l .ClampMax
+00001362                           563  
+00001362  7E00                     564      move.l #0, d7
+00001364                           565  
+00001364  4EF9 0000138E            566      jmp .Return
 0000136A                           567  
-0000136A                           568  .Return:
-0000136A  4CDF 0703                569      movem.l (sp)+, TRAP_REG  *| Pull registers from stack
-0000136E                           570  
-0000136E  4E75                     571      rts
-00001370                           572  
-00001370                           573  ph_CalcVelDir:
-00001370  48E7 C0E0                574      movem.l TRAP_REG, -(sp)  *| Push registers to stack
-00001374                           575  
-00001374  2002                     576      move.l d2, d0           ; Move angle to register for processing
-00001376  E088                     577      lsr.l #8, d0
-00001378  E088                     578      lsr.l #8, d0
-0000137A  80FC 0168                579      divu.w #360, d0         ; Modulo to keep within 360 degrees
-0000137E  C0BC FFFF0000            580      and.l #$FFFF0000, d0
-00001384                           581      
-00001384  4EB9 000014A0            582      jsr ph_Sine             ; sin
-0000138A                           583  
-0000138A                           584      ; We're done with WASD inputs so we can now use d3 for operations
-0000138A  2600                     585      move.l d0, d3           ; Storing sin(theta)
-0000138C  2002                     586      move.l d2, d0           ; Move angle to d0 again    
-0000138E  0680 005A0000            587      add.l #$005A0000, d0    ; Add pi / 2 to get cosine
-00001394  E088                     588      lsr.l #8, d0
-00001396  E088                     589      lsr.l #8, d0
-00001398  80FC 0168                590      divu.w #360, d0         ; Modulo to keep within 360 degrees
-0000139C  C0BC FFFF0000            591      and.l #$FFFF0000, d0
-000013A2                           592  
-000013A2  4EB9 000014A0            593      jsr ph_Sine             ;cos
-000013A8                           594  
-000013A8                           595      ; Now d3 holds sin(theta) and d0 holds cos(theta)
-000013A8                           596  
-000013A8                           597      ; Multiply velocity magnitude by x component
-000013A8  2C07                     598      move.l d7, d6
-000013AA  E08E                     599      lsr.l #8, d6
-000013AC  CCBC 0000FFFF            600      and.l #$0000FFFF, d6
-000013B2                           601  
-000013B2  CDC3                     602      muls.w d3, d6   ; d6 now holds 8.8 x component
-000013B4  E08E                     603      lsr.l #8, d6
-000013B6  CCBC 0000FFFF            604      and.l #$0000FFFF, d6 ; Reduce to 4.4
-000013BC  2606                     605      move.l d6, d3   ; Store x component in d3
-000013BE  E18B                     606      lsl.l #8, d3
-000013C0  E18B                     607      lsl.l #8, d3    ; Move over to left side for eventual merge
-000013C2                           608  
-000013C2                           609      ; Multiply velocity magnitude by y component    
-000013C2  2C07                     610      move.l d7, d6
-000013C4  E08E                     611      lsr.l #8, d6
-000013C6  CCBC 0000FFFF            612      and.l #$0000FFFF, d6
-000013CC                           613      
-000013CC  CDC0                     614      muls.w d0, d6   ; d5 now holds 8.8 y component
-000013CE  E08E                     615      lsr.l #8, d6
-000013D0  CCBC 0000FFFF            616      and.l #$0000FFFF, d6 ; Reduce to 4x4
-000013D6  2006                     617      move.l d6, d0   ; Store y component in d0
-000013D8                           618      
-000013D8  8083                     619      or.l d3, d0 ; Merge x and y to form final vector
-000013DA                           620  
-000013DA  2C00                     621      move.l d0, d6   ; Move final result to final location for processing
-000013DC                           622  
-000013DC                           623  .Return:
-000013DC  4CDF 0703                624      movem.l (sp)+, TRAP_REG  *| Pull registers from stack
-000013E0                           625  
-000013E0  4E75                     626      rts
-000013E2                           627  
-000013E2                           628  ph_CalculatePosition:
-000013E2  48E7 C0E0                629      movem.l TRAP_REG, -(sp)  *| Push registers to stack
-000013E6                           630  
-000013E6  2006                     631      move.l d6, d0
-000013E8  2200                     632      move.l d0, d1 
-000013EA                           633  
-000013EA  E088                     634      lsr.l #8, d0
-000013EC  E088                     635      lsr.l #8, d0
-000013EE  C2BC 0000FFFF            636      and.l #$0000FFFF, d1
-000013F4                           637      
-000013F4  E140                     638      asl.w #8, d0            ; X adjusted to 16.16
-000013F6  80BC FF000000            639      or.l #$FF000000, d0
-000013FC                           640  
-000013FC  E041                     641      asr.w #8, d1            ; Y adjusted to 16.16
-000013FE  82BC FF000000            642      or.l #$FF000000, d1
-00001404                           643  
-00001404                           644      ; Update precise ship position
-00001404  287C 000015E4            645      move.l #ShipPosition, a4
-0000140A                           646  
-0000140A  D094                     647      add.l (a4), d0  ; Ship X Position 
-0000140C  588C                     648      add.l #4, a4
-0000140E  D294                     649      add.l (a4), d1  ; Ship Y Position
-00001410                           650  
-00001410  2881                     651      move.l d1, (a4)
-00001412  598C                     652      sub.l #4, a4
-00001414  2881                     653      move.l d1, (a4)
-00001416                           654  
-00001416                           655      ; Now, update integer ship position (pixel)
-00001416                           656  
-00001416  C0BC FFFF0000            657      and.l #$FFFF0000, d0    ; X is already in position
-0000141C  E089                     658      lsr.l #8, d1            ; Y is shifted right, for once.
-0000141E  E089                     659      lsr.l #8, d1
-00001420                           660  
-00001420  8280                     661      or.l d0, d1
-00001422                           662  
-00001422  2A01                     663      move.l d1, d5
-00001424                           664  
-00001424                           665  .Return:
-00001424  4CDF 0703                666      movem.l (sp)+, TRAP_REG  *| Pull registers from stack
-00001428                           667  
-00001428  4E75                     668      rts
-0000142A                           669  
-0000142A                           670  ph_ClampNumber:
-0000142A  2F02                     671      move.l d2, -(sp) ; Temporarily move d2 out of the way
-0000142C                           672  
-0000142C  2401                     673      move.l d1, d2
-0000142E  E089                     674      lsr.l #8, d1
-00001430  E089                     675      lsr.l #8, d1
-00001432  C4BC 0000FFFF            676      and.l #$0000FFFF, d2
-00001438                           677  
-00001438                           678      *| Compare by word here because it is signed 
-00001438  B041                     679      cmp.w d1, d0    ; Is value less than min?
-0000143A  6D00 000E                680      blt .Under    
-0000143E                           681      
-0000143E  B042                     682      cmp.w d2, d0    ; Is value greater than max?
-00001440  6E00 0010                683      bgt.l .Over
-00001444                           684  
-00001444  4EF9 0000145A            685      jmp .Return     ; Within range, do nothing
+0000136A                           568  .ClampMax:
+0000136A  BEBC 00001000            569      cmp.l #MAX_SPEED, d7
+00001370  6F00 001C                570      ble.l .Return
+00001374                           571  
+00001374  2E3C 00001000            572      move.l #MAX_SPEED, d7
+0000137A                           573  
+0000137A  4EF9 0000138E            574      jmp .Return
+00001380                           575  
+00001380                           576  .Fric:  ; Return to 0 over time while not boosting
+00001380  E387                     577      asl.l #1, d7
+00001382  BEBC FFFFFFFF            578      cmp.l #$FFFFFFFF, d7    ; Is d7 at its lowest possible value?
+00001388  6600 0004                579      bne.l .Return           ; If not, skip this next step
+0000138C                           580  
+0000138C  7E00                     581      move.l #0, d7           ; Return to 0 rather than being stuck at almost -0
+0000138E                           582  
+0000138E                           583  .Return:
+0000138E  4CDF 0703                584      movem.l (sp)+, TRAP_REG  *| Pull registers from stack
+00001392                           585  
+00001392  4E75                     586      rts
+00001394                           587  
+00001394                           588  ph_CalcVelDir:
+00001394  48E7 C0E0                589      movem.l TRAP_REG, -(sp)  *| Push registers to stack
+00001398                           590  
+00001398  2002                     591      move.l d2, d0           ; Move angle to register for processing
+0000139A  E088                     592      lsr.l #8, d0
+0000139C  E088                     593      lsr.l #8, d0
+0000139E  80FC 0168                594      divu.w #360, d0         ; Modulo to keep within 360 degrees
+000013A2  C0BC FFFF0000            595      and.l #$FFFF0000, d0
+000013A8                           596      
+000013A8  4EB9 000014E0            597      jsr ph_Sine             ; sin
+000013AE                           598  
+000013AE                           599      ; We're done with WASD inputs so we can now use d3 for operations
+000013AE  2600                     600      move.l d0, d3           ; Storing sin(theta)
+000013B0  2002                     601      move.l d2, d0           ; Move angle to d0 again    
+000013B2  0680 005A0000            602      add.l #$005A0000, d0    ; Add pi / 2 to get cosine
+000013B8  E088                     603      lsr.l #8, d0
+000013BA  E088                     604      lsr.l #8, d0
+000013BC  80FC 0168                605      divu.w #360, d0         ; Modulo to keep within 360 degrees
+000013C0  C0BC FFFF0000            606      and.l #$FFFF0000, d0
+000013C6                           607  
+000013C6  4EB9 000014E0            608      jsr ph_Sine             ;cos
+000013CC                           609  
+000013CC                           610      ; Now d3 holds sin(theta) and d0 holds cos(theta)
+000013CC                           611  
+000013CC                           612      ; Multiply velocity magnitude by x component
+000013CC  2C07                     613      move.l d7, d6
+000013CE  E08E                     614      lsr.l #8, d6
+000013D0  CCBC 0000FFFF            615      and.l #$0000FFFF, d6
+000013D6                           616  
+000013D6  CDC3                     617      muls.w d3, d6   ; d6 now holds 8.8 x component
+000013D8  E08E                     618      lsr.l #8, d6
+000013DA  CCBC 0000FFFF            619      and.l #$0000FFFF, d6 ; Reduce to 4.4
+000013E0  2606                     620      move.l d6, d3   ; Store x component in d3
+000013E2  E18B                     621      lsl.l #8, d3
+000013E4  E18B                     622      lsl.l #8, d3    ; Move over to left side for eventual merge
+000013E6                           623  
+000013E6                           624      ; Multiply velocity magnitude by y component    
+000013E6  2C07                     625      move.l d7, d6
+000013E8  E08E                     626      lsr.l #8, d6
+000013EA  CCBC 0000FFFF            627      and.l #$0000FFFF, d6
+000013F0                           628      
+000013F0  CDC0                     629      muls.w d0, d6   ; d5 now holds 8.8 y component
+000013F2  E08E                     630      lsr.l #8, d6
+000013F4  CCBC 0000FFFF            631      and.l #$0000FFFF, d6 ; Reduce to 4x4
+000013FA  2006                     632      move.l d6, d0   ; Store y component in d0
+000013FC                           633      
+000013FC  8083                     634      or.l d3, d0 ; Merge x and y to form final vector
+000013FE                           635  
+000013FE  2C00                     636      move.l d0, d6   ; Move final result to final location for processing
+00001400                           637  
+00001400                           638  .Return:
+00001400  4CDF 0703                639      movem.l (sp)+, TRAP_REG  *| Pull registers from stack
+00001404                           640  
+00001404  4E75                     641      rts
+00001406                           642  
+00001406                           643  ph_CalculatePosition:
+00001406  48E7 C0E0                644      movem.l TRAP_REG, -(sp)  *| Push registers to stack
+0000140A                           645  
+0000140A  2006                     646      move.l d6, d0
+0000140C  2200                     647      move.l d0, d1
+0000140E                           648  
+0000140E  E088                     649      lsr.l #8, d0
+00001410  E088                     650      lsr.l #8, d0
+00001412  C2BC 0000FFFF            651      and.l #$0000FFFF, d1
+00001418                           652  
+00001418                           653  .negX:
+00001418  B07C 0000                654      cmp.w #0, d0    ; Is d0 less than zero?
+0000141C  6C00 000E                655      bge.l .posX 
+00001420                           656  
+00001420  4440                     657      neg.w d0
+00001422                           658  
+00001422                           659      ; If so, let's transform to 16.16 
+00001422  E188                     660      lsl.l #8, d0
+00001424  4480                     661      neg.l d0
+00001426                           662  
+00001426  4EF9 0000142E            663      jmp .negY
+0000142C                           664  
+0000142C                           665  .posX:
+0000142C  E188                     666      lsl.l #8, d0
+0000142E                           667  
+0000142E                           668  .negY:
+0000142E  B07C 0000                669      cmp.w #0, d0    ; Is d0 less than zero?
+00001432  6C00 000E                670      bge.l .posY
+00001436                           671  
+00001436  4441                     672      neg.w d1
+00001438                           673  
+00001438                           674      ; If so, let's transform to 16.16 
+00001438  E189                     675      lsl.l #8, d1
+0000143A  4481                     676      neg.l d1
+0000143C                           677  
+0000143C  4EF9 00001444            678      jmp .updatePos
+00001442                           679  
+00001442                           680  .posY:
+00001442  E189                     681      lsl.l #8, d1
+00001444                           682  
+00001444                           683  .updatePos:
+00001444                           684      ; Update precise ship position
+00001444  287C 00001624            685      move.l #ShipPosition, a4
 0000144A                           686  
-0000144A                           687  .Under:     ; We need to clamp value to min
-0000144A  2001                     688      move.l d1, d0
-0000144C                           689  
-0000144C  4EF9 0000145A            690      jmp .Return
-00001452                           691  
-00001452                           692  .Over:      ; We need to clamp value to max
-00001452  2002                     693      move.l d2, d0
-00001454                           694  
-00001454  4EF9 0000145A            695      jmp .Return
-0000145A                           696  
-0000145A                           697  .Return:
-0000145A  241F                     698      move.l (sp)+, d2
-0000145C                           699  
-0000145C  4E75                     700      rts
-0000145E                           701  
-0000145E                           702  ph_ClampVector:
-0000145E  2F02                     703      move.l d2, -(sp)    ; Temporarily move d2 out of the way
-00001460  2F03                     704      move.l d3, -(sp)    ; Temporarily move d3 out of the way
-00001462                           705  
-00001462  2401                     706      move.l d1, d2       ; Extract X & Y value of vector
-00001464  2602                     707      move.l d2, d3
-00001466  E08A                     708      lsr.l #8, d2
-00001468  E08A                     709      lsr.l #8, d2
-0000146A  C6BC 0000FFFF            710      and.l #$0000FFFF, d3
-00001470                           711  
-00001470  C5C2                     712      muls.w d2, d2   ; x ^ 2
-00001472  C7C3                     713      muls.w d3, d3   ; y ^ 2
-00001474  D682                     714      add.l d2, d3    ; x ^ 2 + y ^ 2 = c ^ 2
-00001476                           715  
-00001476                           716      ; (x ^ 2) + (y ^ 2) must be converted from 16.16 to 8.8
-00001476  E08B                     717      lsr.l #8, d3
-00001478  C6BC 0000FFFF            718      and.l #$0000FFFF, d3
-0000147E                           719  
-0000147E  B680                     720      cmp.l d0, d3    ; Is magnitude greater than max?
-00001480  6F00 0018                721      ble.l .Return   ; If not, carry on as usual
-00001484                           722  
-00001484                           723      ; If so, let's CUT IT IN HALF muahahaha
-00001484  2401                     724      move.l d1, d2
-00001486                           725  
-00001486  E08A                     726      lsr.l #8, d2
-00001488  E08A                     727      lsr.l #8, d2
-0000148A  C2BC 0000FFFF            728      and.l #$0000FFFF, d1
-00001490                           729      
-00001490  E242                     730      asr.w #1, d2            ; X
-00001492  E241                     731      asr.w #1, d1            ; Y
-00001494                           732      
-00001494  E18A                     733      lsl.l #8, d2
-00001496  E18A                     734      lsl.l #8, d2
-00001498                           735  
-00001498  8282                     736      or.l d2, d1
-0000149A                           737  
-0000149A                           738  .Return:
-0000149A  261F                     739      move.l (sp)+, d3
-0000149C  241F                     740      move.l (sp)+, d2
+0000144A  D094                     687      add.l (a4), d0  ; Ship X Position 
+0000144C  588C                     688      add.l #4, a4
+0000144E  D294                     689      add.l (a4), d1  ; Ship Y Position
+00001450                           690  
+00001450  2881                     691      move.l d1, (a4)
+00001452  598C                     692      sub.l #4, a4
+00001454  2880                     693      move.l d0, (a4)
+00001456                           694  
+00001456                           695      ; Now, update integer ship position (pixel)
+00001456                           696  
+00001456  C0BC FFFF0000            697      and.l #$FFFF0000, d0    ; X is already in position
+0000145C  E089                     698      lsr.l #8, d1            ; Y is shifted right, for once.
+0000145E  E089                     699      lsr.l #8, d1
+00001460                           700  
+00001460  8280                     701      or.l d0, d1
+00001462                           702  
+00001462  2A01                     703      move.l d1, d5
+00001464                           704  
+00001464                           705  .Return:
+00001464  4CDF 0703                706      movem.l (sp)+, TRAP_REG  *| Pull registers from stack
+00001468                           707  
+00001468  4E75                     708      rts
+0000146A                           709  
+0000146A                           710  ph_ClampNumber:
+0000146A  2F02                     711      move.l d2, -(sp) ; Temporarily move d2 out of the way
+0000146C                           712  
+0000146C  2401                     713      move.l d1, d2
+0000146E  E089                     714      lsr.l #8, d1
+00001470  E089                     715      lsr.l #8, d1
+00001472  C4BC 0000FFFF            716      and.l #$0000FFFF, d2
+00001478                           717  
+00001478                           718      *| Compare by word here because it is signed 
+00001478  B041                     719      cmp.w d1, d0    ; Is value less than min?
+0000147A  6D00 000E                720      blt .Under    
+0000147E                           721      
+0000147E  B042                     722      cmp.w d2, d0    ; Is value greater than max?
+00001480  6E00 0010                723      bgt.l .Over
+00001484                           724  
+00001484  4EF9 0000149A            725      jmp .Return     ; Within range, do nothing
+0000148A                           726  
+0000148A                           727  .Under:     ; We need to clamp value to min
+0000148A  2001                     728      move.l d1, d0
+0000148C                           729  
+0000148C  4EF9 0000149A            730      jmp .Return
+00001492                           731  
+00001492                           732  .Over:      ; We need to clamp value to max
+00001492  2002                     733      move.l d2, d0
+00001494                           734  
+00001494  4EF9 0000149A            735      jmp .Return
+0000149A                           736  
+0000149A                           737  .Return:
+0000149A  241F                     738      move.l (sp)+, d2
+0000149C                           739  
+0000149C  4E75                     740      rts
 0000149E                           741  
-0000149E  4E75                     742      rts
-000014A0                           743  
-000014A0                           744  ph_Sine:
-000014A0  E088                     745      lsr.l #8, d0
-000014A2  E088                     746      lsr.l #8, d0        ; Chopping off fractional
-000014A4                           747  
-000014A4  B0BC 0000005A            748      cmp.l #90, d0       ; Is the angle greater than 90?
-000014AA  6D00 001C                749      blt.l .Q1           ; If not, we're in quadrant 1
-000014AE                           750      
-000014AE  B0BC 000000B4            751      cmp.l #180, d0      ; Is the angle greater than 180?
-000014B4  6D00 0024                752      blt.l .Q2           ; If not, we're in quadrant 2
-000014B8                           753  
-000014B8  B0BC 0000010E            754      cmp.l #270, d0      ; Is the angle greater than 270?
-000014BE  6D00 0038                755      blt.l .Q3           ; If not, we're in quadrant 3
-000014C2                           756      
-000014C2  4EF9 00001512            757      jmp .Q4             ; We are in quadrant 4 by process of elimination
-000014C8                           758  
-000014C8                           759  .Q1:    ; Quadrant 1
-000014C8  E388                     760      lsl.l #1, d0        ; Multiply by 2 (length of word)
-000014CA                           761  
-000014CA  207C 0000152E            762      move.l #sinTable, a0
-000014D0  D1C0                     763      add.l d0, a0        ; Offset to desired index of sin table
-000014D2                           764  
-000014D2  3010                     765      move.w (a0), d0     ; Extract fractional
-000014D4                           766  
-000014D4  4EF9 0000152C            767      jmp .Return
-000014DA                           768  
-000014DA                           769  .Q2:    ; Quadrant 2
-000014DA  0480 0000005A            770      sub.l #90, d0       ; Start at 90 degrees
-000014E0  E388                     771      lsl.l #1, d0        ; Multiply by 2 (length of word)
-000014E2                           772  
-000014E2  207C 0000152E            773      move.l #sinTable, a0
-000014E8  D1FC 000000B4            774      add.l #SINTABLESIZE, a0 ; Moving index to end of array since we're working backwards
-000014EE  91C0                     775      sub.l d0, a0        ; Offset to desired index of sin table (backwards)
-000014F0                           776  
-000014F0  3010                     777      move.w (a0), d0     ; Extract fractional
-000014F2                           778  
-000014F2  4EF9 0000152C            779      jmp .Return
-000014F8                           780  
-000014F8                           781  .Q3:    ; Quadrant 3
-000014F8  0480 000000B4            782      sub.l #180, d0       ; Start at 180 degrees
-000014FE  E388                     783      lsl.l #1, d0        ; Multiply by 2 (length of word)
-00001500                           784  
-00001500  207C 0000152E            785      move.l #sinTable, a0
-00001506  D1C0                     786      add.l d0, a0        ; Offset to desired index of sin table
-00001508                           787  
-00001508  3010                     788      move.w (a0), d0     ; Extract fractional
-0000150A  4440                     789      neg.w d0            ; Flip to negative
-0000150C                           790  
-0000150C  4EF9 0000152C            791      jmp .Return
-00001512                           792  
-00001512                           793  .Q4:    ; Quadrant 4
-00001512  0480 0000010E            794      sub.l #270, d0       ; Start at 90 degrees
-00001518  E388                     795      lsl.l #1, d0         ; Multiply by 2 (length of word)
-0000151A                           796  
-0000151A  207C 0000152E            797      move.l #sinTable, a0
-00001520  D1FC 000000B4            798      add.l #SINTABLESIZE, a0 ; Moving index to end of array since we're working backwards
-00001526  91C0                     799      sub.l d0, a0        ; Offset to desired index of sin table (backwards)
-00001528                           800  
-00001528  3010                     801      move.w (a0), d0     ; Extract fractional
-0000152A                           802  
-0000152A  4440                     803      neg.w d0            ; Flip to negative
-0000152C                           804  
-0000152C                           805  .Return:
-0000152C                           806  
-0000152C  4E75                     807      rts
-0000152E                           808  
-0000152E= 0000 0047 008E 0...      809  sinTable        dc.w    $0,$47,$8E,$D6,$11D,$164,$1AC,$1F3,$23A,$280,$2C7
-00001544= 030D 0353 0399 0...      810                  dc.w    $30D,$353,$399,$3DE,$424,$469,$4AD,$4F1,$535
-00001556= 0578 05BB 05FE 0...      811                  dc.w    $578,$5BB,$5FE,$640,$681,$6C3,$703,$743,$782
-00001568= 07C1 07FF 083D 0...      812                  dc.w    $7C1,$7FF,$83D,$87A,$8B6,$8F2,$92D,$967,$9A1
-0000157A= 09D9 0A11 0A48 0...      813                  dc.w    $9D9,$A11,$A48,$A7F,$AB4,$AE9,$B1D,$B50,$B82
-0000158C= 0BB3 0BE3 0C13 0...      814                  dc.w    $BB3,$BE3,$C13,$C41,$C6F,$C9B,$CC7,$CF1,$D1B
-0000159E= 0D43 0D6B 0D91 0...      815                  dc.w    $D43,$D6B,$D91,$DB6,$DDB,$DFE,$E20,$E41,$E61
-000015B0= 0E80 0E9D 0EBA 0...      816                  dc.w    $E80,$E9D,$EBA,$ED5,$EEF,$F08,$F20,$F37,$F4D
-000015C2= 0F61 0F74 0F86 0...      817                  dc.w    $F61,$F74,$F86,$F97,$FA6,$FB4,$FC1,$FCD,$FD8
-000015D4= 0FE1 0FE9 0FF0 0...      818                  dc.w    $FE1,$FE9,$FF0,$FF6,$FFA,$FFD,$FFF,$FFF
-000015E4                           819  
-000015E4  =000000B4                820  SINTABLESIZE            EQU 180 ; 90 * 2 (word size)
-000015E4                           821  
-000015E4= 02210000 012C0000        822  ShipPosition        dc.l $02210000,$012C0000  ; Position in 16.16 fixed point
-000015E4= 02210000 012C0000        823  -------------------- end include --------------------
-000015EC                           824  * INCLUDE "./7_segment_led.x68" ; Displays a 7-segment LED with the given parameters.
-000015EC                           825  
-000015EC                           826  *,__________________________________________________,
-000015EC                           827  *| fn Main
-000015EC                           828  *| Description: Loads files, sets game state, begins
-000015EC                           829  *|              game loop, and handles quit state
-00002000                           830  START ORG $2000
-00002000                           831  Main:
-00002000                           832      ; Initialize pixel_clear_length
-00002000  23FC 00262E02 00262EA2   833      move.l #pixel_clear_zones, pixel_clear_length
-0000200A                           834  
-0000200A  705C                     835      move.l #92, d0
-0000200C  7211                     836      move.l #17, d1
-0000200E                           837      
-0000200E  4E4F                     838      TRAP #15
-00002010                           839  
-00002010  4EB8 1000                840      jsr fl_LoadFiles
-00002014                           841      
-00002014  7000                     842      move.l #$00000000, d0   ; Position has no offset
-00002016  7200                     843      move.l #$00000000, d1   ; This is not a sprite, it's the background
-00002018  207C 001329BA            844      move.l #pg_Background, a0
-0000201E  4EB8 1110                845      jsr r_PrintImage
-00002022                           846      
-00002022                           847      ; Set up start variables for game loop
-00002022  2A3C 0221012C            848      move.l #$0221012C, d5   ; Start position of ship   
-00002028                           849  
-00002028  7008                     850      move.l #8, d0
-0000202A  4E4F                     851      TRAP #15
-0000202C                           852  
-0000202C  4EB9 00002036            853      jsr GameLoop
-00002032                           854  
-00002032  4E72 3000                855      STOP #$3000
-00002036                           856  *| [End of Function] Main
-00002036                           857  *|__________________________________________________
-00002036                           858  *`                                                  `
-00002036                           859  
-00002036                           860  *,__________________________________________________,
-00002036                           861  *| fn GameLoop
-00002036                           862  *| Description: Perpetually runs game until the quit 
-00002036                           863  *| command is given.
-00002036                           864  *| Persistent Variables:
-00002036                           865  *| d2: Rotation, DeltaTime 
-00002036                           866  *| d3: WASD Inputs, d4: Enter, Esc, Shift, and Space Inputs
-00002036                           867  *| d5: Position, d6: Velocity, d7: Acceleration
-00002036                           868  *| a3: Ship model to use
-00002036                           869  GameLoop:
-00002036  7008                     870      move.l #8, d0  ; Time Code - maybe reuse later?
-00002038                           871  
-00002038  4E4F                     872      TRAP #15
-0000203A                           873  
-0000203A  2001                     874      move.l d1, d0
-0000203C  90B9 0000208C            875      sub.l LastTime, d0
-00002042  B0BC 00000003            876      cmp.l #3, d0            ; Is time elapsed less than 5 seconds?
-00002048  6300 FFEC                877      bls.l GameLoop          ; If not, wait
-0000204C  23C1 0000208C            878      move.l d1, LastTime     ; Otherwise, this is the new last time
-00002052                           879  
-00002052                           880      *,___________________________,
-00002052                           881      *| STAGE ONE: Capture Inputs |
-00002052                           882      *|___________________________|
-00002052                           883      *`                           ` 
-00002052  4EB8 1230                884      jsr i_CaptureInputs   ; Fills registers d3-d4 (destructively) with player inputs
-00002056                           885  
-00002056                           886      *,___________________________,
-00002056                           887      *| STAGE TWO: Physics Pass   |
-00002056                           888      *|___________________________|
-00002056                           889      *`                           `
-00002056  4EB8 1250                890      jsr ph_CalculateRotation
-0000205A  4EB8 12BC                891      jsr ph_SelectShipRotation
-0000205E                           892  
-0000205E  4EB8 12FC                893      jsr ph_CalcVelMagnitude
-00002062  4EB8 1370                894      jsr ph_CalcVelDir
-00002066  4EB8 13E2                895      jsr ph_CalculatePosition
-0000206A                           896  
-0000206A                           897      *,___________________________,
-0000206A                           898      *| STAGE THREE: UI Pass      |
-0000206A                           899      *|___________________________|
-0000206A                           900      *`                           `
-0000206A                           901  
-0000206A                           902      *,___________________________,
-0000206A                           903      *| STAGE FOUR: Rendering     |
-0000206A                           904      *|___________________________|
-0000206A                           905      *`                           `
-0000206A                           906      ; Clear old sprites from screen
-0000206A  4EB8 1198                907      jsr r_ClearSprites ; Wipe sprites from screen
-0000206E                           908  
-0000206E                           909      ; Render ship
-0000206E                           910      ; move.l #pg_Ship, a0
-0000206E  204B                     911      move.l a3, a0   ; Move ship image address to the correct location
-00002070  2005                     912      move.l d5, d0   ; Move position to offset
-00002072  4EB8 1110                913      jsr r_PrintImage
-00002076                           914  
-00002076                           915      ; Render other things
-00002076                           916  
-00002076                           917      ; Swap Buffer
-00002076  4EB8 1226                918      jsr SwapBuffer
-0000207A                           919  
-0000207A  C8BC 00FF0000            920      and.l #$00FF0000, d4
-00002080  B8BC 00FF0000            921      cmp.l #$00FF0000, d4    ; Did player press ESC?
-00002086  6600 FFAE                922      bne.l GameLoop  ; If not, continue loop
-0000208A                           923  
-0000208A  4E75                     924      rts
-0000208C                           925  *| [End of Function] GameLoop
-0000208C                           926  *|__________________________________________________
-0000208C                           927  *`                                                  `
-0000208C                           928  
-0000208C                           929  *,__________________________________________________,
-0000208C                           930  *| Input Variables
-0000208C                           931  LastTime    ds.l 1  ; Stores the last frame's start time
-00002090                           932  
-00002090                           933  BackgroundBmpFile   INCBIN "../resources/background.bmp"
-0012E11A                           934  ; RoadCollisionFile   INCBIN "../resources/collision.txt"
-0012E11A                           935  
-0012E11A                           936  *| Ship Rotations
-0012E11A                           937  ShipBmpFiles        INCBIN "../resources/ship_rotations/Ship_R0.bmp"
-0012E5A4                           938                      INCBIN "../resources/ship_rotations/Ship_R22.5.bmp"
-0012EA2E                           939                      INCBIN "../resources/ship_rotations/Ship_R45.bmp"
-0012EEB8                           940                      INCBIN "../resources/ship_rotations/Ship_R67.5.bmp"
-0012F342                           941                      INCBIN "../resources/ship_rotations/Ship_R90.bmp"
-0012F7CC                           942                      INCBIN "../resources/ship_rotations/Ship_R112.5.bmp"
-0012FC56                           943                      INCBIN "../resources/ship_rotations/Ship_R135.bmp"
-001300E0                           944                      INCBIN "../resources/ship_rotations/Ship_R157.5.bmp"
-0013056A                           945                      INCBIN "../resources/ship_rotations/Ship_R180.bmp"
-001309F4                           946                      INCBIN "../resources/ship_rotations/Ship_R202.5.bmp"
-00130E7E                           947                      INCBIN "../resources/ship_rotations/Ship_R225.bmp"
-00131308                           948                      INCBIN "../resources/ship_rotations/Ship_R247.5.bmp"
-00131792                           949                      INCBIN "../resources/ship_rotations/Ship_R270.bmp"
-00131C1C                           950                      INCBIN "../resources/ship_rotations/Ship_R292.5.bmp"
-001320A6                           951                      INCBIN "../resources/ship_rotations/Ship_R315.bmp"
-00132530                           952                      INCBIN "../resources/ship_rotations/Ship_R337.5.bmp"
-001329BA                           953  EndShipBmpFiles
-001329BA                           954  
-001329BA                           955  
-001329BA                           956  ; DebrisBmpFile       INCBIN "../resources/debris.bmp"
-001329BA                           957  
-001329BA                           958  ; 7SegVerticalBmpFile INCBIN "../resources/7SegVertical.bmp"
-001329BA                           959  ; 7SegVerticalBmpFile INCBIN "../resources/7SegHorizontal.bmp"
-001329BA                           960  
-001329BA                           961  *,__________________________________________________,
-001329BA                           962  *| Global Variables
-001329BA                           963  
-001329BA                           964  *| Data Type: Pixel Grid (pg)
-001329BA                           965  *| $0 = Width
-001329BA                           966  *| $2 = Height
-001329BA                           967  *| $4 = ABGR Pixels (List, length x * y)
-001329BA                           968  *>Renderer
-001329BA                           969  pg_Background   ds.l 307201     ; 1 + 640x480
-0025E9BE                           970  
-0025E9BE                           971  pg_ShipRotations        ds.l 4112   ; (1 + 16x16) x 16 for 16 unique sprites
-002629FE                           972  
-002629FE                           973  pg_Debris       ds.l 257        ; 1 + 16x16
-00262E02                           974  
-00262E02                           975  *| vec2
-00262E02                           976  
-00262E02                           977  
-00262E02                           978  *| Data Type: Pixel Clear Zones -> List<vec2, vec2>
-00262E02                           979  *| An array storing the zones that need to be cleared of pixels
-00262E02                           980  *| Long 1: Stores a vec2 representing the offset in x, y
-00262E02                           981  *| Long 2: Stores a vec2 representing the width and height
-00262E02                           982  pixel_clear_zones   ds.l 40     ; Max of 20 zones to clear at any given time
-00262EA2                           983  pixel_clear_length   ds.l 1      ; Pointer to the last empty address
-00262EA6                           984  
-00262EA6                           985  *>7-Segment LED
-00262EA6                           986  pg_7SegVertical     ds.l 65     ; 1 + 16x4
-00262FAA                           987  pg_7SegHorizontal   ds.l 65     ; 1 + 16x4
-002630AE                           988      
-002630AE                           989      END    START
+0000149E                           742  ph_ClampVector:
+0000149E  2F02                     743      move.l d2, -(sp)    ; Temporarily move d2 out of the way
+000014A0  2F03                     744      move.l d3, -(sp)    ; Temporarily move d3 out of the way
+000014A2                           745  
+000014A2  2401                     746      move.l d1, d2       ; Extract X & Y value of vector
+000014A4  2602                     747      move.l d2, d3
+000014A6  E08A                     748      lsr.l #8, d2
+000014A8  E08A                     749      lsr.l #8, d2
+000014AA  C6BC 0000FFFF            750      and.l #$0000FFFF, d3
+000014B0                           751  
+000014B0  C5C2                     752      muls.w d2, d2   ; x ^ 2
+000014B2  C7C3                     753      muls.w d3, d3   ; y ^ 2
+000014B4  D682                     754      add.l d2, d3    ; x ^ 2 + y ^ 2 = c ^ 2
+000014B6                           755  
+000014B6                           756      ; (x ^ 2) + (y ^ 2) must be converted from 16.16 to 8.8
+000014B6  E08B                     757      lsr.l #8, d3
+000014B8  C6BC 0000FFFF            758      and.l #$0000FFFF, d3
+000014BE                           759  
+000014BE  B680                     760      cmp.l d0, d3    ; Is magnitude greater than max?
+000014C0  6F00 0018                761      ble.l .Return   ; If not, carry on as usual
+000014C4                           762  
+000014C4                           763      ; If so, let's CUT IT IN HALF muahahaha
+000014C4  2401                     764      move.l d1, d2
+000014C6                           765  
+000014C6  E08A                     766      lsr.l #8, d2
+000014C8  E08A                     767      lsr.l #8, d2
+000014CA  C2BC 0000FFFF            768      and.l #$0000FFFF, d1
+000014D0                           769      
+000014D0  E242                     770      asr.w #1, d2            ; X
+000014D2  E241                     771      asr.w #1, d1            ; Y
+000014D4                           772      
+000014D4  E18A                     773      lsl.l #8, d2
+000014D6  E18A                     774      lsl.l #8, d2
+000014D8                           775  
+000014D8  8282                     776      or.l d2, d1
+000014DA                           777  
+000014DA                           778  .Return:
+000014DA  261F                     779      move.l (sp)+, d3
+000014DC  241F                     780      move.l (sp)+, d2
+000014DE                           781  
+000014DE  4E75                     782      rts
+000014E0                           783  
+000014E0                           784  ph_Sine:
+000014E0  E088                     785      lsr.l #8, d0
+000014E2  E088                     786      lsr.l #8, d0        ; Chopping off fractional
+000014E4                           787  
+000014E4  B0BC 0000005A            788      cmp.l #90, d0       ; Is the angle greater than 90?
+000014EA  6D00 001C                789      blt.l .Q1           ; If not, we're in quadrant 1
+000014EE                           790      
+000014EE  B0BC 000000B4            791      cmp.l #180, d0      ; Is the angle greater than 180?
+000014F4  6D00 0024                792      blt.l .Q2           ; If not, we're in quadrant 2
+000014F8                           793  
+000014F8  B0BC 0000010E            794      cmp.l #270, d0      ; Is the angle greater than 270?
+000014FE  6D00 0038                795      blt.l .Q3           ; If not, we're in quadrant 3
+00001502                           796      
+00001502  4EF9 00001552            797      jmp .Q4             ; We are in quadrant 4 by process of elimination
+00001508                           798  
+00001508                           799  .Q1:    ; Quadrant 1
+00001508  E388                     800      lsl.l #1, d0        ; Multiply by 2 (length of word)
+0000150A                           801  
+0000150A  207C 0000156E            802      move.l #sinTable, a0
+00001510  D1C0                     803      add.l d0, a0        ; Offset to desired index of sin table
+00001512                           804  
+00001512  3010                     805      move.w (a0), d0     ; Extract fractional
+00001514                           806  
+00001514  4EF9 0000156C            807      jmp .Return
+0000151A                           808  
+0000151A                           809  .Q2:    ; Quadrant 2
+0000151A  0480 0000005A            810      sub.l #90, d0       ; Start at 90 degrees
+00001520  E388                     811      lsl.l #1, d0        ; Multiply by 2 (length of word)
+00001522                           812  
+00001522  207C 0000156E            813      move.l #sinTable, a0
+00001528  D1FC 000000B4            814      add.l #SINTABLESIZE, a0 ; Moving index to end of array since we're working backwards
+0000152E  91C0                     815      sub.l d0, a0        ; Offset to desired index of sin table (backwards)
+00001530                           816  
+00001530  3010                     817      move.w (a0), d0     ; Extract fractional
+00001532                           818  
+00001532  4EF9 0000156C            819      jmp .Return
+00001538                           820  
+00001538                           821  .Q3:    ; Quadrant 3
+00001538  0480 000000B4            822      sub.l #180, d0       ; Start at 180 degrees
+0000153E  E388                     823      lsl.l #1, d0        ; Multiply by 2 (length of word)
+00001540                           824  
+00001540  207C 0000156E            825      move.l #sinTable, a0
+00001546  D1C0                     826      add.l d0, a0        ; Offset to desired index of sin table
+00001548                           827  
+00001548  3010                     828      move.w (a0), d0     ; Extract fractional
+0000154A  4440                     829      neg.w d0            ; Flip to negative
+0000154C                           830  
+0000154C  4EF9 0000156C            831      jmp .Return
+00001552                           832  
+00001552                           833  .Q4:    ; Quadrant 4
+00001552  0480 0000010E            834      sub.l #270, d0       ; Start at 90 degrees
+00001558  E388                     835      lsl.l #1, d0         ; Multiply by 2 (length of word)
+0000155A                           836  
+0000155A  207C 0000156E            837      move.l #sinTable, a0
+00001560  D1FC 000000B4            838      add.l #SINTABLESIZE, a0 ; Moving index to end of array since we're working backwards
+00001566  91C0                     839      sub.l d0, a0        ; Offset to desired index of sin table (backwards)
+00001568                           840  
+00001568  3010                     841      move.w (a0), d0     ; Extract fractional
+0000156A                           842  
+0000156A  4440                     843      neg.w d0            ; Flip to negative
+0000156C                           844  
+0000156C                           845  .Return:
+0000156C                           846  
+0000156C  4E75                     847      rts
+0000156E                           848  
+0000156E= 0000 0047 008E 0...      849  sinTable        dc.w    $0,$47,$8E,$D6,$11D,$164,$1AC,$1F3,$23A,$280,$2C7
+00001584= 030D 0353 0399 0...      850                  dc.w    $30D,$353,$399,$3DE,$424,$469,$4AD,$4F1,$535
+00001596= 0578 05BB 05FE 0...      851                  dc.w    $578,$5BB,$5FE,$640,$681,$6C3,$703,$743,$782
+000015A8= 07C1 07FF 083D 0...      852                  dc.w    $7C1,$7FF,$83D,$87A,$8B6,$8F2,$92D,$967,$9A1
+000015BA= 09D9 0A11 0A48 0...      853                  dc.w    $9D9,$A11,$A48,$A7F,$AB4,$AE9,$B1D,$B50,$B82
+000015CC= 0BB3 0BE3 0C13 0...      854                  dc.w    $BB3,$BE3,$C13,$C41,$C6F,$C9B,$CC7,$CF1,$D1B
+000015DE= 0D43 0D6B 0D91 0...      855                  dc.w    $D43,$D6B,$D91,$DB6,$DDB,$DFE,$E20,$E41,$E61
+000015F0= 0E80 0E9D 0EBA 0...      856                  dc.w    $E80,$E9D,$EBA,$ED5,$EEF,$F08,$F20,$F37,$F4D
+00001602= 0F61 0F74 0F86 0...      857                  dc.w    $F61,$F74,$F86,$F97,$FA6,$FB4,$FC1,$FCD,$FD8
+00001614= 0FE1 0FE9 0FF0 0...      858                  dc.w    $FE1,$FE9,$FF0,$FF6,$FFA,$FFD,$FFF,$FFF
+00001624                           859  
+00001624  =000000B4                860  SINTABLESIZE            EQU 180 ; 90 * 2 (word size)
+00001624                           861  
+00001624= 02210000 012C0000        862  ShipPosition        dc.l $02210000,$012C0000  ; Position in 16.16 fixed point
+0000162C                           863  
+0000162C                           864  -------------------- end include --------------------
+0000162C                           865      INCLUDE "./display.x68"       ; Displays a 7-segment LED with the given parameters.
+0000162C                           866  
+0000162C  =02540014                867  LAP_DISPLAY_OFFSET          EQU $02540014
+0000162C  =00050014                868  TIMER_1_DISPLAY_OFFSET      EQU $00050014
+0000162C  =001A0014                869  TIMER_2_DISPLAY_OFFSET      EQU $001A0014
+0000162C  =00370014                870  TIMER_3_DISPLAY_OFFSET      EQU $00370014
+0000162C  =004C0014                871  TIMER_4_DISPLAY_OFFSET      EQU $004C0014
+0000162C                           872  
+0000162C                           873  ss_InitDisplays:
+0000162C  48E7 FFFE                874      movem.l ALL_REG, -(sp) *| Push registers to stack
+00001630                           875  
+00001630                           876      *| Setting up lap counter
+00001630  207C 000019D2            877      move.l #ssd_Lap, a0
+00001636  20BC 02540014            878      move.l #LAP_DISPLAY_OFFSET, (a0)
+0000163C  7000                     879      move.l #0, d0
+0000163E                           880  
+0000163E  4EB9 00001686            881      jsr ss_SevenSegUpdate
+00001644                           882  
+00001644                           883      *| Setting up timer counters, from leftmost to rightmost
+00001644  207C 000019DA            884      move.l #ssd_Timer, a0
+0000164A  20BC 00050014            885      move.l #TIMER_1_DISPLAY_OFFSET, (a0)
+00001650                           886  
+00001650  4EB9 00001686            887      jsr ss_SevenSegUpdate
+00001656                           888  
+00001656  5088                     889      add.l #8, a0    ; Move a0 to next display in timer
+00001658                           890  
+00001658  20BC 001A0014            891      move.l #TIMER_2_DISPLAY_OFFSET, (a0)
+0000165E                           892  
+0000165E  4EB9 00001686            893      jsr ss_SevenSegUpdate
+00001664                           894          
+00001664  5088                     895      add.l #8, a0    ; Move a0 to next display in timer
+00001666                           896  
+00001666  20BC 00370014            897      move.l #TIMER_3_DISPLAY_OFFSET, (a0)
+0000166C                           898  
+0000166C  4EB9 00001686            899      jsr ss_SevenSegUpdate
+00001672                           900  
+00001672  5088                     901      add.l #8, a0    ; Move a0 to next display in timer
+00001674                           902  
+00001674  20BC 004C0014            903      move.l #TIMER_4_DISPLAY_OFFSET, (a0)
+0000167A                           904  
+0000167A  4EB9 00001686            905      jsr ss_SevenSegUpdate
+00001680                           906  .Return:
+00001680  4CDF 7FFF                907      movem.l (sp)+, ALL_REG  *| Pull registers from stack
+00001684                           908  
+00001684  4E75                     909      rts
+00001686                           910  
+00001686                           911  ss_SevenSegUpdate:
+00001686  48E7 FFFE                912      movem.l ALL_REG, -(sp) *| Push registers to stack
+0000168A                           913  
+0000168A                           914      ; Get table value
+0000168A  227C 000019C8            915      move.l #SevenSegTable, a1
+00001690  D3C0                     916      add.l d0, a1            ; Offset to bitmask
+00001692  1411                     917      move.b (a1), d2
+00001694                           918  
+00001694                           919      ; Update bitmask
+00001694  2248                     920      move.l a0, a1
+00001696  5889                     921      add.l #4, a1            ; Move to next long
+00001698  3282                     922      move.w d2, (a1)         ; Move by word to prevent misalignment
+0000169A  5489                     923      add.l #2, a1            ; Move to next word
+0000169C  3280                     924      move.w d0, (a1)         ; Put the actual number in for reference
+0000169E                           925  
+0000169E                           926      ; Mark new clear zone
+0000169E  2610                     927      move.l (a0), d3
+000016A0                           928      
+000016A0  2279 00262F0C            929      move.l pixel_clear_length, a1
+000016A6  2283                     930      move.l d3, (a1)                     ; Move image offset to pixel_clear_zones
+000016A8  5889                     931      add.l #4, a1                        ; Move to next word
+000016AA  22BC 0012001F            932      move.l #SEVEN_SEG_DIMENSIONS, (a1)  ; Move image dimensions to pixel_clear_zones
+000016B0  50B9 00262F0C            933      add.l #8, pixel_clear_length        ; Move to next word
+000016B6                           934  
+000016B6                           935      ; Call an early sprite clear
+000016B6  4EB8 11BC                936      jsr r_ClearSprites
+000016BA                           937  
+000016BA                           938      ; Print new display value
+000016BA                           939      *| Note: A lot of this is necessary boilerplate, 
+000016BA                           940      *| but also consistent across all 7-seg displays.
+000016BA                           941  .PrintSegments:
+000016BA  283C 00000080            942      move.l #%10000000, d4   ; Starting bit to check
+000016C0  7200                     943      move.l #0, d1           ; Are not immediately removed
+000016C2                           944  .First:
+000016C2  2002                     945      move.l d2, d0
+000016C4  C084                     946      and.l d4, d0
+000016C6  B084                     947      cmp.l d4, d0
+000016C8  6600 0014                948      bne.l .Second           ; Skip to second
+000016CC                           949      
+000016CC  2003                     950      move.l d3, d0
+000016CE  0680 00030000            951      add.l #$00030000, d0    ; + Local Position
+000016D4  207C 00263014            952      move.l #pg_7SegHorizontal, a0
+000016DA  4EB8 1134                953      jsr r_PrintImage
+000016DE                           954  
+000016DE                           955  .Second:    
+000016DE  E28C                     956      lsr.l #1, d4            ; Get next bit to check
+000016E0  2002                     957      move.l d2, d0
+000016E2  C084                     958      and.l d4, d0
+000016E4  B084                     959      cmp.l d4, d0 
+000016E6  6600 0010                960      bne.l .Third            ; Skip to third
+000016EA                           961         
+000016EA  2003                     962      move.l d3, d0
+000016EC  5680                     963      add.l #$00000003, d0    ; + Local Position
+000016EE  207C 00262F10            964      move.l #pg_7SegVertical, a0
+000016F4  4EB8 1134                965      jsr r_PrintImage
+000016F8                           966  
+000016F8                           967  .Third:
+000016F8  E28C                     968      lsr.l #1, d4            ; Get next bit to check
+000016FA  2002                     969      move.l d2, d0
+000016FC  C084                     970      and.l d4, d0
+000016FE  B084                     971      cmp.l d4, d0 
+00001700  6600 0014                972      bne.l .Fourth           ; Skip to fourth
+00001704                           973  
+00001704  2003                     974      move.l d3, d0
+00001706  0680 000F0003            975      add.l #$000F0003, d0    ; + Local Position
+0000170C  207C 00262F10            976      move.l #pg_7SegVertical, a0
+00001712  4EB8 1134                977      jsr r_PrintImage
+00001716                           978  
+00001716                           979  .Fourth:
+00001716  E28C                     980      lsr.l #1, d4            ; Get next bit to check
+00001718  2002                     981      move.l d2, d0
+0000171A  C084                     982      and.l d4, d0
+0000171C  B084                     983      cmp.l d4, d0 
+0000171E  6600 0014                984      bne.l .Fifth            ; Skip to fifth
+00001722                           985  
+00001722  2003                     986      move.l d3, d0
+00001724  0680 0003000E            987      add.l #$0003000E, d0    ; + Local Position
+0000172A  207C 00263014            988      move.l #pg_7SegHorizontal, a0
+00001730  4EB8 1134                989      jsr r_PrintImage
+00001734                           990  
+00001734                           991  .Fifth:
+00001734  E28C                     992      lsr.l #1, d4            ; Get next bit to check
+00001736  2002                     993      move.l d2, d0
+00001738  C084                     994      and.l d4, d0
+0000173A  B084                     995      cmp.l d4, d0 
+0000173C  6600 0014                996      bne.l .Sixth            ; Skip to sixth
+00001740                           997  
+00001740  2003                     998      move.l d3, d0
+00001742  0680 00000010            999      add.l #$00000010, d0    ; + Local Position
+00001748  207C 00262F10           1000      move.l #pg_7SegVertical, a0
+0000174E  4EB8 1134               1001      jsr r_PrintImage
+00001752                          1002  
+00001752                          1003  .Sixth:
+00001752  E28C                    1004      lsr.l #1, d4            ; Get next bit to check
+00001754  2002                    1005      move.l d2, d0
+00001756  C084                    1006      and.l d4, d0
+00001758  B084                    1007      cmp.l d4, d0 
+0000175A  6600 0014               1008      bne.l .Seventh          ; Skip to seventh
+0000175E                          1009  
+0000175E  2003                    1010      move.l d3, d0
+00001760  0680 000F0010           1011      add.l #$000F0010, d0    ; + Local Position
+00001766  207C 00262F10           1012      move.l #pg_7SegVertical, a0
+0000176C  4EB8 1134               1013      jsr r_PrintImage
+00001770                          1014  
+00001770                          1015  .Seventh:
+00001770  E28C                    1016      lsr.l #1, d4
+00001772  2002                    1017      move.l d2, d0
+00001774  C084                    1018      and.l d4, d0
+00001776  B084                    1019      cmp.l d4, d0 
+00001778  6600 0014               1020      bne.l .Return           ; Skip to end
+0000177C                          1021  
+0000177C  2003                    1022      move.l d3, d0
+0000177E  0680 0003001C           1023      add.l #$0003001C, d0    ; + Local Position
+00001784  207C 00263014           1024      move.l #pg_7SegHorizontal, a0
+0000178A  4EB8 1134               1025      jsr r_PrintImage
+0000178E                          1026  
+0000178E                          1027  .Return:
+0000178E  4CDF 7FFF               1028      movem.l (sp)+, ALL_REG  *| Pull registers from stack
+00001792                          1029  
+00001792  4E75                    1030      rts
+00001794                          1031  
+00001794                          1032  SevenSegVerticalBmpFile     INCBIN "../resources/7SegVertical.bmp"
+000018AE                          1033  SevenSegHorizontalBmpFile   INCBIN "../resources/7SegHorizontal.bmp"
+000019C8                          1034  
+000019C8                          1035  ; A table containing bytes where each bit represents on or off
+000019C8                          1036  ; for a segment on the display. Table starts at 0 and ends at 9
+000019C8= EE 24 BA                1037  SevenSegTable       dc.b %11101110,%00100100,%10111010
+000019CB= B6 74 D6                1038                      dc.b %10110110,%01110100,%11010110
+000019CE= DE A4 FE F4             1039                      dc.b %11011110,%10100100,%11111110,%11110100
+000019D2                          1040  
+000019D2                          1041  ssd_Lap         ds.l 2
+000019DA                          1042  ssd_Timer       ds.l 8
+000019DA                          1043  -------------------- end include --------------------
+000019FA                          1044  
+000019FA                          1045  *,__________________________________________________,
+000019FA                          1046  *| fn Main
+000019FA                          1047  *| Description: Loads files, sets game state, begins
+000019FA                          1048  *|              game loop, and handles quit state
+00002000                          1049  START ORG $2000
+00002000                          1050  Main:
+00002000                          1051      ; Initialize pixel_clear_length
+00002000  23FC 00262E6C 00262F0C  1052      move.l #pixel_clear_zones, pixel_clear_length
+0000200A                          1053  
+0000200A  705C                    1054      move.l #92, d0
+0000200C  7211                    1055      move.l #17, d1
+0000200E                          1056      
+0000200E  4E4F                    1057      TRAP #15
+00002010                          1058  
+00002010  4EB8 1000               1059      jsr fl_LoadFiles
+00002014                          1060      
+00002014  7000                    1061      move.l #$00000000, d0   ; Position has no offset
+00002016  7200                    1062      move.l #$00000000, d1   ; This is not a sprite, it's the background
+00002018  7400                    1063      move.l #$00000000, d2
+0000201A  207C 00132A24           1064      move.l #pg_Background, a0
+00002020  4EB8 1134               1065      jsr r_PrintImage
+00002024                          1066      
+00002024  4EB8 162C               1067      jsr ss_InitDisplays
+00002028                          1068      
+00002028                          1069      ; Set up start variables for game loop
+00002028  2A3C 0221012C           1070      move.l #$0221012C, d5   ; Start position of ship
+0000202E                          1071  
+0000202E  7008                    1072      move.l #GET_TIME, d0    ; Get current time (start of game time)
+00002030  4E4F                    1073      TRAP #15
+00002032                          1074  
+00002032  23C1 000020F6           1075      move.l d1, LastSecond    ; This time is the start of the game
+00002038                          1076  
+00002038  4EB9 00002042           1077      jsr GameLoop
+0000203E                          1078  
+0000203E  4E72 3000               1079      STOP #$3000
+00002042                          1080  *| [End of Function] Main
+00002042                          1081  *|__________________________________________________
+00002042                          1082  *`                                                  `
+00002042                          1083  
+00002042                          1084  *,__________________________________________________,
+00002042                          1085  *| fn GameLoop
+00002042                          1086  *| Description: Perpetually runs game until the quit 
+00002042                          1087  *| command is given.
+00002042                          1088  *| Persistent Variables:
+00002042                          1089  *| d2: Rotation, DeltaTime 
+00002042                          1090  *| d3: WASD Inputs, d4: Enter, Esc, Shift, and Space Inputs
+00002042                          1091  *| d5: Position, d6: Velocity, d7: Acceleration
+00002042                          1092  *| a3: Ship model to use
+00002042                          1093  GameLoop:
+00002042  7008                    1094      move.l #8, d0  ; Time Code - maybe reuse later?
+00002044                          1095  
+00002044  4E4F                    1096      TRAP #15
+00002046                          1097  
+00002046  4EB9 0000209E           1098      jsr UpdateTimer         ; Updates the in-game timer if a second has passed
+0000204C                          1099  
+0000204C  2001                    1100      move.l d1, d0
+0000204E  90B9 000020F2           1101      sub.l LastTime, d0
+00002054  B0BC 00000005           1102      cmp.l #5, d0            ; Is time elapsed less than 5/100ths of a second?
+0000205A  6300 FFE6               1103      bls.l GameLoop          ; If not, wait
+0000205E  23C1 000020F2           1104      move.l d1, LastTime     ; Otherwise, this is the new last time
+00002064                          1105  
+00002064                          1106      *,___________________________,
+00002064                          1107      *| STAGE ONE: Capture Inputs |
+00002064                          1108      *|___________________________|
+00002064                          1109      *`                           ` 
+00002064  4EB8 1254               1110      jsr i_CaptureInputs   ; Fills registers d3-d4 (destructively) with player inputs
+00002068                          1111  
+00002068                          1112      *,___________________________,
+00002068                          1113      *| STAGE TWO: Physics Pass   |
+00002068                          1114      *|___________________________|
+00002068                          1115      *`                           `
+00002068  4EB8 1274               1116      jsr ph_CalculateRotation
+0000206C  4EB8 12E0               1117      jsr ph_SelectShipRotation
+00002070                          1118  
+00002070  4EB8 1320               1119      jsr ph_CalcVelMagnitude
+00002074  4EB8 1394               1120      jsr ph_CalcVelDir
+00002078  4EB8 1406               1121      jsr ph_CalculatePosition
+0000207C                          1122  
+0000207C                          1123      *,___________________________,
+0000207C                          1124      *| STAGE THREE: UI Pass      |
+0000207C                          1125      *|___________________________|
+0000207C                          1126      *`                           `
+0000207C                          1127  
+0000207C                          1128  
+0000207C                          1129      *,___________________________,
+0000207C                          1130      *| STAGE FOUR: Rendering     |
+0000207C                          1131      *|___________________________|
+0000207C                          1132      *`                           `
+0000207C                          1133      ; Clear old sprites from screen
+0000207C  4EB8 11BC               1134      jsr r_ClearSprites ; Wipe sprites from screen
+00002080                          1135  
+00002080                          1136      ; Render ship
+00002080                          1137      ; move.l #pg_Ship, a0
+00002080  204B                    1138      move.l a3, a0   ; Move ship image address to the correct location
+00002082  2005                    1139      move.l d5, d0   ; Move position to offset
+00002084  4EB8 1134               1140      jsr r_PrintImage
+00002088                          1141  
+00002088                          1142      ; Render other things
+00002088                          1143  
+00002088                          1144      ; Swap Buffer
+00002088  4EB8 124A               1145      jsr SwapBuffer
+0000208C                          1146  
+0000208C  C8BC 00FF0000           1147      and.l #$00FF0000, d4
+00002092  B8BC 00FF0000           1148      cmp.l #$00FF0000, d4    ; Did player press ESC?
+00002098  6600 FFA8               1149      bne.l GameLoop  ; If not, continue loop
+0000209C                          1150  
+0000209C  4E75                    1151      rts
+0000209E                          1152  *| [End of Function] GameLoop
+0000209E                          1153  *|__________________________________________________
+0000209E                          1154  *`                                                  `
+0000209E                          1155  
+0000209E                          1156  *,__________________________________________________,
+0000209E                          1157  *| fn UpdateTimer
+0000209E                          1158  *| Description: Checks if a second has passed to update
+0000209E                          1159  *| the timer
+0000209E                          1160  *| Inputs: d1: Current Time
+0000209E                          1161  UpdateTimer:
+0000209E  48E7 FFFE               1162      movem.l ALL_REG, -(sp)  *| Push registers to stack
+000020A2                          1163  
+000020A2  2001                    1164      move.l d1, d0
+000020A4  90B9 000020F6           1165      sub.l LastSecond, d0
+000020AA  B0BC 00000064           1166      cmp.l #100, d0          ; Is time elapsed 1 second?
+000020B0  6300 003A               1167      bls.l .Return            ; If not, carry on as normal
+000020B4                          1168  
+000020B4  23C1 000020F6           1169      move.l d1, LastSecond   ; Otherwise, we're now in the next second
+000020BA                          1170  
+000020BA  4280                    1171      clr.l d0                ; clear d0 for next step
+000020BC                          1172  
+000020BC  207C 000019DA           1173      move.l #ssd_Timer, a0   ; Let's now update the timer
+000020C2  D1FC 00000018           1174      add.l #24, a0           ; Offset to 4th display (00:0X)
+000020C8                          1175  
+000020C8                          1176  .AddSecond:
+000020C8  5C88                    1177      add.l #6, a0            ; Offset to actual number
+000020CA  3010                    1178      move.w (a0), d0         ; Grab number
+000020CC  5280                    1179      add.l #1, d0            ; Increment by 1
+000020CE  B0BC 00000009           1180      cmp.l #9, d0            ; Has its number gone over 9?
+000020D4  6F00 0010               1181      ble.l .EndOverflow      ; If not, we're done.
+000020D8                          1182  
+000020D8                          1183      ; Otherwise, we overflow to the next display
+000020D8  5D88                    1184      sub.l #6, a0            ; offset to start of current display
+000020DA  7000                    1185      move.l #0, d0           ; New number in display must be 0
+000020DC  4EB8 1686               1186      jsr ss_SevenSegUpdate
+000020E0                          1187  
+000020E0  5188                    1188      sub.l #8, a0            ; offset to start of last display
+000020E2  4EF8 20C8               1189      jmp .AddSecond          ; Continue loop
+000020E6                          1190  
+000020E6                          1191  .EndOverflow:
+000020E6  5D88                    1192      sub.l #6, a0            ; Offset back to start of display addr
+000020E8  4EB8 1686               1193      jsr ss_SevenSegUpdate   ; Print this display's new number
+000020EC                          1194  
+000020EC                          1195  .Return:
+000020EC  4CDF 7FFF               1196      movem.l (sp)+, ALL_REG  *| Pull registers from stack
+000020F0                          1197  
+000020F0  4E75                    1198      rts
+000020F2                          1199  *| [End of Function] UpdateTimer
+000020F2                          1200  *|__________________________________________________
+000020F2                          1201  *`                                                  `
+000020F2                          1202  
+000020F2                          1203  
+000020F2                          1204  *,__________________________________________________,
+000020F2                          1205  *| Input Variables
+000020F2                          1206  LastTime    ds.l 1  ; Stores the last frame's start time
+000020F6                          1207  LastSecond   ds.l 1  ; Stores the time the game started
+000020FA                          1208  
+000020FA                          1209  BackgroundBmpFile   INCBIN "../resources/background.bmp"
+0012E184                          1210  ; RoadCollisionFile   INCBIN "../resources/collision.txt"
+0012E184                          1211  
+0012E184                          1212  *| Ship Rotations
+0012E184                          1213  ShipBmpFiles        INCBIN "../resources/ship_rotations/Ship_R0.bmp"
+0012E60E                          1214                      INCBIN "../resources/ship_rotations/Ship_R22.5.bmp"
+0012EA98                          1215                      INCBIN "../resources/ship_rotations/Ship_R45.bmp"
+0012EF22                          1216                      INCBIN "../resources/ship_rotations/Ship_R67.5.bmp"
+0012F3AC                          1217                      INCBIN "../resources/ship_rotations/Ship_R90.bmp"
+0012F836                          1218                      INCBIN "../resources/ship_rotations/Ship_R112.5.bmp"
+0012FCC0                          1219                      INCBIN "../resources/ship_rotations/Ship_R135.bmp"
+0013014A                          1220                      INCBIN "../resources/ship_rotations/Ship_R157.5.bmp"
+001305D4                          1221                      INCBIN "../resources/ship_rotations/Ship_R180.bmp"
+00130A5E                          1222                      INCBIN "../resources/ship_rotations/Ship_R202.5.bmp"
+00130EE8                          1223                      INCBIN "../resources/ship_rotations/Ship_R225.bmp"
+00131372                          1224                      INCBIN "../resources/ship_rotations/Ship_R247.5.bmp"
+001317FC                          1225                      INCBIN "../resources/ship_rotations/Ship_R270.bmp"
+00131C86                          1226                      INCBIN "../resources/ship_rotations/Ship_R292.5.bmp"
+00132110                          1227                      INCBIN "../resources/ship_rotations/Ship_R315.bmp"
+0013259A                          1228                      INCBIN "../resources/ship_rotations/Ship_R337.5.bmp"
+00132A24                          1229  EndShipBmpFiles
+00132A24                          1230  
+00132A24                          1231  
+00132A24                          1232  ; DebrisBmpFile       INCBIN "../resources/debris.bmp"
+00132A24                          1233  
+00132A24                          1234  *,__________________________________________________,
+00132A24                          1235  *| Global Variables
+00132A24                          1236  
+00132A24                          1237  *| Data Type: Pixel Grid (pg)
+00132A24                          1238  *| $0 = Width
+00132A24                          1239  *| $2 = Height
+00132A24                          1240  *| $4 = ABGR Pixels (List, length x * y)
+00132A24                          1241  *>Renderer
+00132A24                          1242  pg_Background   ds.l 307201     ; 1 + 640x480
+0025EA28                          1243  
+0025EA28                          1244  pg_ShipRotations        ds.l 4112   ; (1 + 16x16) x 16 for 16 unique sprites
+00262A68                          1245  
+00262A68                          1246  pg_Debris       ds.l 257        ; 1 + 16x16
+00262E6C                          1247  
+00262E6C                          1248  *| vec2
+00262E6C                          1249  
+00262E6C                          1250  
+00262E6C                          1251  *| Data Type: Pixel Clear Zones -> List<vec2, vec2>
+00262E6C                          1252  *| An array storing the zones that need to be cleared of pixels
+00262E6C                          1253  *| Long 1: Stores a vec2 representing the offset in x, y
+00262E6C                          1254  *| Long 2: Stores a vec2 representing the width and height
+00262E6C                          1255  pixel_clear_zones   ds.l 40     ; Max of 20 zones to clear at any given time
+00262F0C                          1256  pixel_clear_length   ds.l 1      ; Pointer to the last empty address
+00262F10                          1257  
+00262F10                          1258  *>7-Segment LED
+00262F10                          1259  pg_7SegVertical     ds.l 65     ; 1 + 16x4
+00263014                          1260  pg_7SegHorizontal   ds.l 65     ; 1 + 16x4
+00263118                          1261      
+00263118                          1262      END    START
 
 No errors detected
 No warnings generated
@@ -1001,98 +1274,132 @@ Symbol-name         Value
 -------------------------
 ACCEL_AMOUNT        100
 ALL_REG             7FFF
-BACKGROUNDBMPFILE   2090
+BACKGROUNDBMPFILE   20FA
 DECEL_AMOUNT        100
-ENDSHIPBMPFILES     1329BA
+ENDSHIPBMPFILES     132A24
 ENTER               D
 ESC                 1B
-FL_LOADBITMAP       1044
+FL_LOADBITMAP       1068
 FL_LOADFILES        1000
-FL_LOADSHIPROTATIONS  101A
-FL_LOADSHIPROTATIONS:LOADBMP  1026
+FL_LOADSHIPROTATIONS  103E
+FL_LOADSHIPROTATIONS:LOADBMP  104A
 FP_11P25            B4000
 FP_22P5             168000
 FP_360              1680000
-GAMELOOP            2036
-GETBITMAPCHUNKS     108E
-GETSINGLEPIXEL      10A8
+GAMELOOP            2042
+GETBITMAPCHUNKS     10B2
+GETSINGLEPIXEL      10CC
 GET_KEY_INPUT_COMMAND  13
-I_CAPTUREINPUTS     1230
-I_CAPTUREINPUTS:RETURN  124A
-LASTTIME            208C
+GET_TIME            8
+I_CAPTUREINPUTS     1254
+I_CAPTUREINPUTS:RETURN  126E
+LAP_DISPLAY_OFFSET  2540014
+LASTSECOND          20F6
+LASTTIME            20F2
 MAIN                2000
 MAX_SPEED           1000
 MAX_VELOCITY        30000
-PARSEBITMAPHEADER   1048
-PARSELITTLEENDIANLONG  1108
-PG_7SEGHORIZONTAL   262FAA
-PG_7SEGVERTICAL     262EA6
-PG_BACKGROUND       1329BA
-PG_DEBRIS           2629FE
-PG_SHIPROTATIONS    25E9BE
-PH_CALCULATEPOSITION  13E2
-PH_CALCULATEPOSITION:RETURN  1424
-PH_CALCULATEROTATION  1250
-PH_CALCULATEROTATION:ANGLEOVER  12A4
-PH_CALCULATEROTATION:ANGLEUNDER  12B0
-PH_CALCULATEROTATION:FIXANGLE  128A
-PH_CALCULATEROTATION:RETURN  12B6
-PH_CALCULATEROTATION:TURNLEFT  126E
-PH_CALCULATEROTATION:TURNRIGHT  1284
-PH_CALCVELDIR       1370
-PH_CALCVELDIR:RETURN  13DC
-PH_CALCVELMAGNITUDE  12FC
-PH_CALCVELMAGNITUDE:ACCEL  1322
-PH_CALCVELMAGNITUDE:CLAMP  1334
-PH_CALCVELMAGNITUDE:CLAMPMAX  1346
-PH_CALCVELMAGNITUDE:CLAMPMIN  1334
-PH_CALCVELMAGNITUDE:DECEL  132E
-PH_CALCVELMAGNITUDE:FRIC  135C
-PH_CALCVELMAGNITUDE:RETURN  136A
-PH_CLAMPNUMBER      142A
-PH_CLAMPNUMBER:OVER  1452
-PH_CLAMPNUMBER:RETURN  145A
-PH_CLAMPNUMBER:UNDER  144A
-PH_CLAMPVECTOR      145E
-PH_CLAMPVECTOR:RETURN  149A
-PH_SELECTSHIPROTATION  12BC
-PH_SELECTSHIPROTATION:GETFILE  12EA
-PH_SELECTSHIPROTATION:NEXTROT  12CA
-PH_SELECTSHIPROTATION:RETURN  12F6
-PH_SINE             14A0
-PH_SINE:Q1          14C8
-PH_SINE:Q2          14DA
-PH_SINE:Q3          14F8
-PH_SINE:Q4          1512
-PH_SINE:RETURN      152C
-PIXEL_CLEAR_LENGTH  262EA2
-PIXEL_CLEAR_ZONES   262E02
+PARSEBITMAPHEADER   106C
+PARSELITTLEENDIANLONG  112C
+PG_7SEGHORIZONTAL   263014
+PG_7SEGVERTICAL     262F10
+PG_BACKGROUND       132A24
+PG_DEBRIS           262A68
+PG_SHIPROTATIONS    25EA28
+PH_CALCULATEPOSITION  1406
+PH_CALCULATEPOSITION:NEGX  1418
+PH_CALCULATEPOSITION:NEGY  142E
+PH_CALCULATEPOSITION:POSX  142C
+PH_CALCULATEPOSITION:POSY  1442
+PH_CALCULATEPOSITION:RETURN  1464
+PH_CALCULATEPOSITION:UPDATEPOS  1444
+PH_CALCULATEROTATION  1274
+PH_CALCULATEROTATION:ANGLEOVER  12C8
+PH_CALCULATEROTATION:ANGLEUNDER  12D4
+PH_CALCULATEROTATION:FIXANGLE  12AE
+PH_CALCULATEROTATION:RETURN  12DA
+PH_CALCULATEROTATION:TURNLEFT  1292
+PH_CALCULATEROTATION:TURNRIGHT  12A8
+PH_CALCVELDIR       1394
+PH_CALCVELDIR:RETURN  1400
+PH_CALCVELMAGNITUDE  1320
+PH_CALCVELMAGNITUDE:ACCEL  1346
+PH_CALCVELMAGNITUDE:CLAMP  1358
+PH_CALCVELMAGNITUDE:CLAMPMAX  136A
+PH_CALCVELMAGNITUDE:CLAMPMIN  1358
+PH_CALCVELMAGNITUDE:DECEL  1352
+PH_CALCVELMAGNITUDE:FRIC  1380
+PH_CALCVELMAGNITUDE:RETURN  138E
+PH_CLAMPNUMBER      146A
+PH_CLAMPNUMBER:OVER  1492
+PH_CLAMPNUMBER:RETURN  149A
+PH_CLAMPNUMBER:UNDER  148A
+PH_CLAMPVECTOR      149E
+PH_CLAMPVECTOR:RETURN  14DA
+PH_SELECTSHIPROTATION  12E0
+PH_SELECTSHIPROTATION:GETFILE  130E
+PH_SELECTSHIPROTATION:NEXTROT  12EE
+PH_SELECTSHIPROTATION:RETURN  131A
+PH_SINE             14E0
+PH_SINE:Q1          1508
+PH_SINE:Q2          151A
+PH_SINE:Q3          1538
+PH_SINE:Q4          1552
+PH_SINE:RETURN      156C
+PIXEL_CLEAR_LENGTH  262F0C
+PIXEL_CLEAR_ZONES   262E6C
 PRINT_PIXEL         52
-R_CLEARSPRITES      1198
-R_CLEARSPRITES:CHECKENDOFSPRITES  1210
-R_CLEARSPRITES:CLEARPIXEL  11DA
-R_CLEARSPRITES:CLEARSPRITE  11DA
-R_CLEARSPRITES:GETSPRITE  11B4
-R_CLEARSPRITES:LOADREGISTER  119C
-R_CLEARSPRITES:PRINTBGPIXEL  11EC
-R_CLEARSPRITES:RETURN  1220
-R_PRINTIMAGE        1110
-R_PRINTIMAGE:LOADVARSTOREGISTERS  1134
-R_PRINTIMAGE:NOPRINT  117E
-R_PRINTIMAGE:PRINTPIXEL  1162
-R_PRINTIMAGE:RETURN  1192
+R_CLEARSPRITES      11BC
+R_CLEARSPRITES:CHECKENDOFSPRITES  1234
+R_CLEARSPRITES:CLEARPIXEL  11FE
+R_CLEARSPRITES:CLEARSPRITE  11FE
+R_CLEARSPRITES:GETSPRITE  11D8
+R_CLEARSPRITES:LOADREGISTER  11C0
+R_CLEARSPRITES:PRINTBGPIXEL  1210
+R_CLEARSPRITES:RETURN  1244
+R_PRINTIMAGE        1134
+R_PRINTIMAGE:LOADVARSTOREGISTERS  1158
+R_PRINTIMAGE:NOPRINT  11A2
+R_PRINTIMAGE:PRINTPIXEL  1186
+R_PRINTIMAGE:RETURN  11B6
 SCREEN_HEIGHT       1E0
 SCREEN_WIDTH        280
 SET_PIXEL_COLOR     50
+SEVENSEGHORIZONTALBMPFILE  18AE
+SEVENSEGTABLE       19C8
+SEVENSEGVERTICALBMPFILE  1794
+SEVEN_SEG_DIMENSIONS  12001F
 SHIFT               10
-SHIPBMPFILES        12E11A
-SHIPPOSITION        15E4
+SHIPBMPFILES        12E184
+SHIPPOSITION        1624
 SHIP_BMP_SIZE       48A
 SHIP_PG_SIZE        404
-SINTABLE            152E
+SINTABLE            156E
 SINTABLESIZE        B4
 SPACE               20
+SSD_LAP             19D2
+SSD_TIMER           19DA
+SS_INITDISPLAYS     162C
+SS_INITDISPLAYS:RETURN  1680
+SS_SEVENSEGUPDATE   1686
+SS_SEVENSEGUPDATE:FIFTH  1734
+SS_SEVENSEGUPDATE:FIRST  16C2
+SS_SEVENSEGUPDATE:FOURTH  1716
+SS_SEVENSEGUPDATE:PRINTSEGMENTS  16BA
+SS_SEVENSEGUPDATE:RETURN  178E
+SS_SEVENSEGUPDATE:SECOND  16DE
+SS_SEVENSEGUPDATE:SEVENTH  1770
+SS_SEVENSEGUPDATE:SIXTH  1752
+SS_SEVENSEGUPDATE:THIRD  16F8
 START               2000
-SWAPBUFFER          1226
+SWAPBUFFER          124A
 SWAP_BUFFER         5E
+TIMER_1_DISPLAY_OFFSET  50014
+TIMER_2_DISPLAY_OFFSET  1A0014
+TIMER_3_DISPLAY_OFFSET  370014
+TIMER_4_DISPLAY_OFFSET  4C0014
 TRAP_REG            703
+UPDATETIMER         209E
+UPDATETIMER:ADDSECOND  20C8
+UPDATETIMER:ENDOVERFLOW  20E6
+UPDATETIMER:RETURN  20EC

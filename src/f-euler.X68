@@ -29,6 +29,8 @@ GET_KEY_INPUT_COMMAND   EQU 19
 SET_PIXEL_COLOR     EQU 80
 PRINT_PIXEL         EQU 82
 
+GET_TIME            EQU 8
+
 SWAP_BUFFER         EQU 94
 
 *| 7 Segment Stuff
@@ -41,7 +43,7 @@ SEVEN_SEG_DIMENSIONS    EQU $0012001F
     INCLUDE "./inputs.x68"        ; Handles player inputs for processing
 * INCLUDE "./gameplay.x68"        ; Handles in-game timer, lap counter, and game states
     INCLUDE "./physics.x68"       ; Calculates player acceleration, velocity, and collisions.
-* INCLUDE "./7_segment_led.x68"   ; Displays a 7-segment LED with the given parameters.
+    INCLUDE "./display.x68"       ; Displays a 7-segment LED with the given parameters.
 
 *,__________________________________________________,
 *| fn Main
@@ -65,11 +67,15 @@ Main:
     move.l #pg_Background, a0
     jsr r_PrintImage
     
+    jsr ss_InitDisplays
+    
     ; Set up start variables for game loop
     move.l #$0221012C, d5   ; Start position of ship
 
-    move.l #8, d0
+    move.l #GET_TIME, d0    ; Get current time (start of game time)
     TRAP #15
+
+    move.l d1, LastSecond    ; This time is the start of the game
 
     jsr GameLoop
 
@@ -92,9 +98,11 @@ GameLoop:
 
     TRAP #15
 
+    jsr UpdateTimer         ; Updates the in-game timer if a second has passed
+
     move.l d1, d0
     sub.l LastTime, d0
-    cmp.l #3, d0            ; Is time elapsed less than 5 seconds?
+    cmp.l #5, d0            ; Is time elapsed less than 5/100ths of a second?
     bls.l GameLoop          ; If not, wait
     move.l d1, LastTime     ; Otherwise, this is the new last time
 
@@ -149,136 +157,57 @@ GameLoop:
 *`                                                  `
 
 *,__________________________________________________,
-*| fn SevSegUpdate
-*| Description: Updates a given seven segment display
-*| to a new value. Queues the old image to be deleted
-*| and marks this image for display.
-*| a0: Pointer to target display, d0: new number
-ss_SevenSegUpdate:
-    movem.l ALL_REG, -(sp) *| Push registers to stack
+*| fn UpdateTimer
+*| Description: Checks if a second has passed to update
+*| the timer
+*| Inputs: d1: Current Time
+UpdateTimer:
+    movem.l ALL_REG, -(sp)  *| Push registers to stack
 
-    ; Get table value
-    move.l #SevenSegTable, a1
-    add.l d0, a1        ; Offset to bitmask
-    move.b (a1), d2
+    move.l d1, d0
+    sub.l LastSecond, d0
+    cmp.l #100, d0          ; Is time elapsed 1 second?
+    bls.l .Return            ; If not, carry on as normal
 
-    ; Update bitmask
-    move.l a0, a1
-    add.l #4, a1
-    move.w d2, a1       ; Move by word to prevent misalignment
+    move.l d1, LastSecond   ; Otherwise, we're now in the next second
 
-    ; Mark new clear zone
-    move.l (a0), d3
-    
-    move.l pixel_clear_length, a1
-    move.l d3, (a1)                     ; Move image offset to pixel_clear_zones
-    add.l #4, a1                        ; Move to next word
-    move.l #SEVEN_SEG_DIMENSIONS, (a1)  ; Move image dimensions to pixel_clear_zones
-    add.l #8, pixel_clear_length        ; Move to next word
+    clr.l d0                ; clear d0 for next step
 
-    ; Call an early sprite clear
-    jsr r_ClearSprites
+    move.l #ssd_Timer, a0   ; Let's now update the timer
+    add.l #24, a0           ; Offset to 4th display (00:0X)
 
-    ; Print new display value
-    *| Note: A lot of this is necessarily boilerplate, 
-    *| but also consistent across all 7-seg displays.
-.PrintSegments:
-    move.l #%10000000, d4   ; Starting bit to check
-    move.l #0, d1           ; Are not immediately removed
-.First:
-    move.l d2, d0
-    and.l d4, d0
-    cmp.l d4, d0
-    bne.l .Second           ; Skip to second
-    
-    move.l d3, d0
-    add.l #$00030000, d0    ; + Local Position
-    move.l #pg_7SegHorizontal, a0
-    jsr r_PrintImage
+.AddSecond:
+    add.l #6, a0            ; Offset to actual number
+    move.w (a0), d0         ; Grab number
+    add.l #1, d0            ; Increment by 1
+    cmp.l #9, d0            ; Has its number gone over 9?
+    ble.l .EndOverflow      ; If not, we're done.
 
-.Second:    
-    lsr.l #1, d4            ; Get next bit to check
-    move.l d2, d0
-    and.l d4, d0
-    cmp.l d4, d0 
-    bne.l .Third            ; Skip to third
-       
-    move.l d3, d0
-    add.l #$00000003, d0    ; + Local Position
-    move.l #pg_7SegVertical, a0
-    jsr r_PrintImage
+    ; Otherwise, we overflow to the next display
+    sub.l #6, a0            ; offset to start of current display
+    move.l #0, d0           ; New number in display must be 0
+    jsr ss_SevenSegUpdate
 
-.Third:
-    lsr.l #1, d4            ; Get next bit to check
-    move.l d2, d0
-    and.l d4, d0
-    cmp.l d4, d0 
-    bne.l .Fourth           ; Skip to fourth
+    sub.l #8, a0            ; offset to start of last display
+    jmp .AddSecond          ; Continue loop
 
-    move.l d3, d0
-    add.l #$000F0004, d0    ; + Local Position
-    move.l #pg_7SegVertical, a0
-    jsr r_PrintImage
-
-.Fourth:
-    lsr.l #1, d4            ; Get next bit to check
-    move.l d2, d0
-    and.l d4, d0
-    cmp.l d4, d0 
-    bne.l .Fifth            ; Skip to fifth
-
-    move.l d3, d0
-    add.l #$0003000E, d0    ; + Local Position
-    move.l #pg_7SegHorizontal, a0
-    jsr r_PrintImage
-
-.Fifth:
-    lsr.l #1, d4            ; Get next bit to check
-    move.l d2, d0
-    and.l d4, d0
-    cmp.l d4, d0 
-    bne.l .Sixth            ; Skip to sixth
-
-    move.l d3, d0
-    add.l #$00000010, d0    ; + Local Position
-    move.l #pg_7SegVertical, a0
-    jsr r_PrintImage
-
-.Sixth:
-    lsr.l #1, d4            ; Get next bit to check
-    move.l d2, d0
-    and.l d4, d0
-    cmp.l d4, d0 
-    bne.l .Seventh          ; Skip to seventh
-
-    move.l d3, d0
-    add.l #$000F0010, d0    ; + Local Position
-    move.l #pg_7SegVertical, a0
-    jsr r_PrintImage
-
-.Seventh:
-    lsr.l #1, d4
-    move.l d2, d0
-    and.l d4, d0
-    cmp.l d4, d0 
-    bne.l .Return           ; Skip to end
-
-    move.l d3, d0
-    add.l #$0003001C, d0    ; + Local Position
-    move.l #pg_7SegHorizontal, a0
-    jsr r_PrintImage
+.EndOverflow:
+    sub.l #6, a0            ; Offset back to start of display addr
+    jsr ss_SevenSegUpdate   ; Print this display's new number
 
 .Return:
     movem.l (sp)+, ALL_REG  *| Pull registers from stack
 
     rts
-*| [End of Function] SevSegUpdate
+*| [End of Function] UpdateTimer
 *|__________________________________________________
 *`                                                  `
+
 
 *,__________________________________________________,
 *| Input Variables
 LastTime    ds.l 1  ; Stores the last frame's start time
+LastSecond   ds.l 1  ; Stores the time the game started
 
 BackgroundBmpFile   INCBIN "../resources/background.bmp"
 ; RoadCollisionFile   INCBIN "../resources/collision.txt"
@@ -304,14 +233,6 @@ EndShipBmpFiles
 
 
 ; DebrisBmpFile       INCBIN "../resources/debris.bmp"
-SevenSegVerticalBmpFile     INCBIN "../resources/7SegVertical.bmp"
-SevenSegHorizontalBmpFile   INCBIN "../resources/7SegHorizontal.bmp"
-
-; A table containing bytes where each bit represents on or off
-; for a segment on the display. Table starts at 0 and ends at 9
-SevenSegTable       dc.b %11101110,%00100100,%10111010
-                    dc.b %10110110,%01110100,%11010110
-                    dc.b %11011110,%10100100,%11111110,%11110100
 
 *,__________________________________________________,
 *| Global Variables
@@ -329,13 +250,6 @@ pg_Debris       ds.l 257        ; 1 + 16x16
 
 *| vec2
 
-*| Data Type: Seven Segment Display (ssd)
-*| $0 = Offset X
-*| $2 = Offset Y
-*| $4 = Bitmask ; the bitmask representing which bytes to display.
-*| $6 = TimeToDisplay?
-ssd_Lap         ds.l 2
-ssd_Timer       ds.l 8
 
 *| Data Type: Pixel Clear Zones -> List<vec2, vec2>
 *| An array storing the zones that need to be cleared of pixels
@@ -349,21 +263,6 @@ pg_7SegVertical     ds.l 65     ; 1 + 16x4
 pg_7SegHorizontal   ds.l 65     ; 1 + 16x4
     
     END    START
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
