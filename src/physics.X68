@@ -485,6 +485,7 @@ sinTable        dc.w    $0,$47,$8E,$D6,$11D,$164,$1AC,$1F3,$23A,$280,$2C7
 SINTABLESIZE            EQU 180 ; 90 * 2 (word size)
 
 ShipPosition        dc.l $02210000,$012C0000  ; Position in 16.16 fixed point
+
 *~Font name~Courier New~
 *~Font size~10~
 *~Tab type~1~

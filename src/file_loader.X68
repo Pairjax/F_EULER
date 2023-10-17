@@ -18,12 +18,12 @@ fl_LoadFiles:
     jsr fl_LoadBitmap
 
     *| LoadBitmap(a0=file_root: bitmap*, a1=output_image: pixel_grid*)
-    move.l #7SegVerticalBmpFile, a0   *| file_root
+    move.l #SevenSegVerticalBmpFile, a0   *| file_root
     move.l #pg_7SegVertical, a1       *| output_image
     jsr fl_LoadBitmap
 
     *| LoadBitmap(a0=file_root: bitmap*, a1=output_image: pixel_grid*)
-    move.l #7SegHorizontalBmpFile, a0   *| file_root
+    move.l #SevenSegHorizontalBmpFile, a0   *| file_root
     move.l #pg_7SegHorizontal, a1       *| output_image
     jsr fl_LoadBitmap
 
