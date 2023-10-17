@@ -107,8 +107,8 @@ GameLoop:
     jsr ph_CalculateRotation
     jsr ph_SelectShipRotation
 
-    jsr ph_CalculateAcceleration
-    jsr ph_CalculateVelocity
+    jsr ph_CalcVelMagnitude
+    jsr ph_CalcVelDir
     jsr ph_CalculatePosition
 
     *,___________________________,
@@ -204,6 +204,7 @@ pg_7SegVertical     ds.l 65     ; 1 + 16x4
 pg_7SegHorizontal   ds.l 65     ; 1 + 16x4
     
     END    START
+
 
 
 

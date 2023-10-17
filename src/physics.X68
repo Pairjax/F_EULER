@@ -11,10 +11,10 @@ FP_360              EQU $01680000   ; Hex value for 360 degrees in 16.16 fixed p
 FP_22P5             EQU $00168000   ; Hex value for 22.5 degrees in 16.16 fixed point
 FP_11P25            EQU $000B4000   ; Hex value for 11.25 degrees in 16.16 fixed point
 
-ACCEL_AMOUNT        EQU $00003000   ; Increases speed at 0.125 pixels per frame 
-DECEL_AMOUNT        EQU $00001000   ; Increases speed at 0.0625 pixels per frame 
+ACCEL_AMOUNT        EQU $00000100   ; Increases speed at 0.125 pixels per frame 
+DECEL_AMOUNT        EQU $00000100   ; Increases speed at 0.0625 pixels per frame 
 
-MAX_SPEED           EQU $0002000
+MAX_SPEED           EQU $00001000
 
 *,__________________________________________________,
 *| [Physics] fn CalculateRotation
@@ -149,7 +149,7 @@ ph_CalcVelMagnitude:
     jmp .Return
 
 .ClampMax:
-    cmp.l #MAX_SPEED, d7    
+    cmp.l #MAX_SPEED, d7
     ble.l .Return
 
     move.l #MAX_SPEED, d7
@@ -175,146 +175,60 @@ ph_CalcVelMagnitude:
 *| [Physics] fn CalculateVelocityDirection
 *| Description: Takes rotation & velocity magnitude to find vector of move direction
 ph_CalcVelDir:
+    movem.l TRAP_REG, -(sp)  *| Push registers to stack
+
+    move.l d2, d0           ; Move angle to register for processing
+    lsr.l #8, d0
+    lsr.l #8, d0
+    divu.w #360, d0         ; Modulo to keep within 360 degrees
+    and.l #$FFFF0000, d0
+    
+    jsr ph_Sine             ; sin
+
+    ; We're done with WASD inputs so we can now use d3 for operations
+    move.l d0, d3           ; Storing sin(theta)
+    move.l d2, d0           ; Move angle to d0 again    
+    add.l #$005A0000, d0    ; Add pi / 2 to get cosine
+    lsr.l #8, d0
+    lsr.l #8, d0
+    divu.w #360, d0         ; Modulo to keep within 360 degrees
+    and.l #$FFFF0000, d0
+
+    jsr ph_Sine             ;cos
+
+    ; Now d3 holds sin(theta) and d0 holds cos(theta)
+
+    ; Multiply velocity magnitude by x component
+    move.l d7, d6
+    lsr.l #8, d6
+    and.l #$0000FFFF, d6
+
+    muls.w d3, d6   ; d6 now holds 8.8 x component
+    lsr.l #8, d6
+    and.l #$0000FFFF, d6 ; Reduce to 4.4
+    move.l d6, d3   ; Store x component in d3
+    lsl.l #8, d3
+    lsl.l #8, d3    ; Move over to left side for eventual merge
+
+    ; Multiply velocity magnitude by y component    
+    move.l d7, d6
+    lsr.l #8, d6
+    and.l #$0000FFFF, d6
+    
+    muls.w d0, d6   ; d5 now holds 8.8 y component
+    lsr.l #8, d6
+    and.l #$0000FFFF, d6 ; Reduce to 4x4
+    move.l d6, d0   ; Store y component in d0
+    
+    or.l d3, d0 ; Merge x and y to form final vector
+
+    move.l d0, d6   ; Move final result to final location for processing
 
 .Return:
     movem.l (sp)+, TRAP_REG  *| Pull registers from stack
 
     rts
 *| [End of Function] CalculateVelocityDirection
-*|__________________________________________________
-*`                                                  `
-
-*,__________________________________________________,
-*| [Physics] fn CalculateAcceleration
-*| Description: Takes W & S inputs to find acceleration magnitude
-ph_CalculateAcceleration:
-    movem.l TRAP_REG, -(sp)  *| Push registers to stack
-
-    move.l d3, d0           ; Copying WASD inputs to extract A & D
-    move.l d0, d1
-
-    lsr.l #8, d0            ; W key input
-    lsr.l #8, d0
-    lsr.l #8, d0
-
-    lsr.l #8, d1            ; S key input
-    and.l #$000000FF, d1    
-
-    cmp.l d0, d1            ; Are S & S both pressed or not pressed?
-    beq.l .Fric             ; If so, let's apply friction.
-
-    cmp.l #0, d0            ; Are we accelerating?
-    beq.l .Decel            ; If not, then we must be decelerating.
-
-.Accel:
-    move.l #$00000004, d1   ; magnitude of acceleration (0.5)
-
-    jmp .Vec
-
-.Decel:
-    move.l #$FFFFFFFE, d1   ; magnitude of acceleration (-0.25)
-
-.Vec:  ; Builds a vector of the x and y component
-    move.l d2, d0           ; Move angle to register for processing
-    add.l #$00B40000, d0    ; Angle should actually be facing the other way, so +180
-    
-    jsr ph_Sine              ; sin
-
-    ; We're done with WASD inputs so we can now use d3 for operations
-    move.l d0, d3           ; Storing sin(theta)
-    move.l d2, d0           ; Move angle to d0 again    
-    add.l #$00B40000, d0    ; Angle should actually be facing the other way, so +180
-    add.l #$005A0000, d0    ; Add pi / 2 to get cosine
-
-    jsr ph_Sine              ;cos
-
-    muls.w d1, d0           ; Multiply both sin and cosine to get x and y component  
-    muls.w d1, d3  
-
-    *| X and Y are now in 12.20. We are going to clamp them back down to 4.12
-    *| X fix
-    lsr.l #8, d0            ; Cut off excess fractional bits
-    and.l #$0000FFFF, d0
-
-    lsr.l #8, d3            ; Cut off excess fractional bits
-    and.l #$0000FFFF, d3
-
-    lsl.l #8, d3            ; Move x component to the left side
-    lsl.l #8, d3
-
-    or.l d3, d0         ; Merge together into a single vector.
-    add.l d0, d7        ; Add to existing acceleration
-
-    jmp .Clamp
-
-.Fric:
-    move.l d7, d0           ; Move accel to another register for value extraction
-    
-    lsr.l #8, d0            ; x component
-    lsr.l #8, d0
-
-    asr.w #1, d0            ; Divide by two
-
-    lsl.l #8, d0            ; Move back to position for merge
-    lsl.l #8, d0
-
-    and.l #$0000FFFF, d7    ; y component
-    asr.w #1, d7            ; Divide by two
-
-    or.l d0, d7            ; New acceleration
-
-.Clamp: ; clamps acceleration - TODO
-
-.Return:
-    movem.l (sp)+, TRAP_REG  *| Pull registers from stack
-
-    rts
-*| [End of Function] CalculateAcceleration
-*|__________________________________________________
-*`                                                  `
-
-*,__________________________________________________,
-*| [Physics] fn CalculateVelocity
-*| Description: Take acceleration and use it to calculate velocity
-ph_CalculateVelocity:
-    movem.l TRAP_REG, -(sp)  *| Push registers to stack
-    
-    move.l d7, d0           ; Pull acceleration out
-    move.l d0, d1 
-
-    lsr.l #8, d0            ; Extract to two registers
-    lsr.l #8, d0            ; X value
-    and.l #$0000FFFF, d1    ; Y value
-
-    move.l d6, d3           ; Extract to two registers
-    lsr.l #8, d6            ; X value
-    lsr.l #8, d6
-    and.l #$0000FFFF, d3    ; Y value
-
-    add.w d0, d6
-    add.w d1, d3
-
-    lsl.l #8, d6
-    lsl.l #8, d6
-
-    or.l d3, d6
-
-.Fric: ; Apply friction to slow the vehicle down
-
-.Apply:
-    *| ClampVector(d0=magnitude_sqr: word, d1=vector) -> d1=clamped_vector
-    move.l d6, d1
-    move.l #$000000FF, d0   *| Max of 1
-
-    jsr ph_ClampVector
-    
-    move.l d1, d6
-
-.Return:
-    movem.l (sp)+, TRAP_REG  *| Pull registers from stack
-
-    rts
-*| [End of Function] CalculateVelocity
 *|__________________________________________________
 *`                                                  `
 
@@ -331,22 +245,32 @@ ph_CalculatePosition:
     lsr.l #8, d0
     and.l #$0000FFFF, d1
     
-    asr.w #8, d0            ; X adjusted to whole number
-    asr.w #4, d0
-    asr.w #8, d1            ; Y adjusted to whole number
-    asr.w #4, d1
+    asl.w #8, d0            ; X adjusted to 16.16
+    or.l #$FF000000, d0
 
-    move.l d5, d3
-    lsr.l #8, d3
-    lsr.l #8, d3
-    and.l #$0000FFFF, d5
+    asr.w #8, d1            ; Y adjusted to 16.16
+    or.l #$FF000000, d1
 
-    add.w d0, d3
-    add.w d1, d5
-    lsl.l #8, d3
-    lsl.l #8, d3
+    ; Update precise ship position
+    move.l #ShipPosition, a4
 
-    or.l d3, d5
+    add.l (a4), d0  ; Ship X Position 
+    add.l #4, a4
+    add.l (a4), d1  ; Ship Y Position
+
+    move.l d1, (a4)
+    sub.l #4, a4
+    move.l d1, (a4)
+
+    ; Now, update integer ship position (pixel)
+
+    and.l #$FFFF0000, d0    ; X is already in position
+    lsr.l #8, d1            ; Y is shifted right, for once.
+    lsr.l #8, d1
+
+    or.l d0, d1
+
+    move.l d1, d5
 
 .Return:
     movem.l (sp)+, TRAP_REG  *| Pull registers from stack
@@ -534,6 +458,8 @@ sinTable        dc.w    $0,$47,$8E,$D6,$11D,$164,$1AC,$1F3,$23A,$280,$2C7
                 dc.w    $FE1,$FE9,$FF0,$FF6,$FFA,$FFD,$FFF,$FFF
 
 SINTABLESIZE            EQU 180 ; 90 * 2 (word size)
+
+ShipPosition        dc.l $02210000,$012C0000  ; Position in 16.16 fixed point
 *~Font name~Courier New~
 *~Font size~10~
 *~Tab type~1~
