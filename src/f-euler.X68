@@ -79,22 +79,16 @@ Main:
     TRAP #15
 
     move.l d1, LastSecond    ; This time is the start of the game
-
-    jsr pwr_FuelUp
-    jsr pwr_SpawnPowerup
     
     move.l #SET_FILL_COLOR, d0  ; Set fill color to default green
     move.l #FUEL_BAR_COLOR, d1
 
     TRAP #15
 
-    move.l #8, d2   ; Sets starting rotation to 180 degrees
+    jsr pwr_FuelUp
+    jsr pwr_SpawnPowerup
 
-    
-    move.l #70, d0
-    move.l #game_song, a1
-    
-    TRAP #15
+    move.l #8, d2   ; Sets starting rotation to 180 degrees
 
     jsr GameLoop
 
@@ -145,18 +139,29 @@ GameLoop:
     *|___________________________|
     *`                           `
     jsr ph_CalculateRotation
-    jsr ph_SelectShipRotation
 
     jsr ph_CalcVelMagnitude
     jsr ph_CalcVelDir
     jsr ph_CalculatePosition
 
-    jsr cl_CheckCollisions
+    move.l flag_IsBoosting, d0
+    cmp.l #0, d0    ; Are we boosting?
+    beq.l .NoBoost
+
+    move.l #pg_ShipI, a3
+    jmp .Render
+
+.NoBoost:
+    jsr cl_CheckCollisions ; Boosting IGNORES collisions
+    jsr ph_SelectShipRotation   ; boosting has its own unique ship model
+
 
     *,___________________________,
     *| STAGE THREE: Rendering    |
     *|___________________________|
     *`                           `
+
+.Render:
     ; Clear old sprites from screen
     jsr r_ClearSprites ; Wipe sprites from screen
 
@@ -269,8 +274,6 @@ LastSecond   ds.l 1  ; Stores the time the game started
 flag_IsDead         dc.w $0
 flag_IsBoosting     dc.w $0
 flag_CanLap         dc.w $0
-
-game_song           dc.b '../resources/song.wav',0
 
     END    START
 

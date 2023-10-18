@@ -23,7 +23,7 @@ fl_LoadLoading:
     jsr r_PrintImage
 
     jsr SwapBuffer
-    
+
 .Return:
     rts
 *| [End of Function] LoadResources
@@ -62,6 +62,11 @@ fl_LoadFiles:
     jsr fl_LoadCollisionMap     ; No inputs needed because there is only one
 
     jsr fl_LoadShipRotations
+
+    *| LoadBitmap(a0=file_root: bitmap*, a1=output_image: pixel_grid*)
+    move.l #ShipIBmpFile, a0   *| file_root
+    move.l #pg_ShipI, a1       *| output_image
+    jsr fl_LoadBitmap
     
     rts
 *| [End of Function] LoadResources
@@ -314,6 +319,8 @@ ShipBmpFiles        INCBIN "../resources/ship_rotations/Ship_R0.bmp"
                     INCBIN "../resources/ship_rotations/Ship_R315.bmp"
                     INCBIN "../resources/ship_rotations/Ship_R337.5.bmp"
 EndShipBmpFiles
+
+ShipIBmpFile        INCBIN "../resources/ship_i.bmp"
 
 *~Font name~Courier New~
 *~Font size~10~

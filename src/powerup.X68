@@ -201,6 +201,8 @@ pwr_ClearPowerup:
 pwr_FuelUp:
     movem.l ALL_REG, -(sp)  *| Push registers to stack
 
+    move.l #FUEL_MAX, FuelLevel
+
     jsr pwr_ClearPowerup    ; Clear texture & material
 
     move.l #SET_PIXEL_COLOR, d0
@@ -231,22 +233,57 @@ pwr_FuelUp:
 pwr_FuelUse:
     movem.l ALL_REG, -(sp)  *| Push registers to stack
     
+    move.l #0, flag_IsBoosting  ; by default is not boosting
+    
     move.l d4, d0
     and.l #$000000FF, d0    ; Is the player holding space?
     cmp.b #$FF, d0
     bne.l .Return   ; If not, do nothing
 
+    move.l #SET_PIXEL_COLOR, d0
+    move.l #FUEL_BAR_BG_COLOR, d1
+
+    TRAP #15
+
+    move.l #FUEL_BAR_STARTX, d1
+    move.l #FUEL_BAR_STARTY, d2
+
+    move.l #FUEL_BAR_ENDX, d3
+    move.l #FUEL_BAR_STARTY, d4
+
+    move.l #PRINT_LINE, d0
+
+    TRAP #15
+
     move.l FuelLevel, d0
     sub.l #1, d0
     cmp.l #0, d0    ; Is d0 negative?
-    bls.l .Return   ; Out of fuel
+    bls.l .Empty   ; Out of fuel
+    
+    move.l #1, flag_IsBoosting  ; We now know 100% we are boosting
 
-    move.l FUEL_BAR_STARTX, d1
-    move.l FUEL_BAR_ENDY, d2
-    sub.l d0, d2
+    move.l d0, FuelLevel
+    move.l d0, d4
 
-    move.l FUEL_BAR_ENDX, d3
+    move.l #FUEL_BAR_STARTX, d1
+    move.l #FUEL_BAR_ENDY, d2
+    sub.l d4, d2
+
+    move.l #FUEL_BAR_ENDX, d3
     move.l d2, d4
+
+    move.l #PRINT_LINE, d0
+
+    TRAP #15
+
+    jmp .Return
+
+.Empty:
+    move.l #FUEL_BAR_STARTX, d1
+    move.l #FUEL_BAR_ENDY, d2
+
+    move.l #FUEL_BAR_ENDX, d3
+    move.l #FUEL_BAR_ENDY, d4
 
     move.l #PRINT_LINE, d0
 
@@ -270,6 +307,7 @@ FUEL_BAR_ENDY           EQU $01AA
 
 FUEL_BAR_WIDTH          EQU 28
 FUEL_BAR_COLOR          EQU $0043DB9C
+FUEL_BAR_BG_COLOR       EQU $413933
 
 FuelLevel               ds.l 1
 

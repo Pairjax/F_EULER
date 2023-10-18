@@ -243,6 +243,7 @@ pixel_clear_length  ds.l 1      ; Pointer to the last empty address
 *| $4 = ABGR Pixels (List, length x * y)
 pg_Background           ds.l 307400     ; 1 + 640x480
 pg_ShipRotations        ds.l 4112       ; (1 + 16x16) x 16 for 16 unique sprites
+pg_ShipI                ds.l 257        ; 1 + 16x16
 pg_Powerup              ds.l 257        ; 1 + 16x16  
 
 pg_Loading              ds.l 11751      ; 1 + 250 x 47
