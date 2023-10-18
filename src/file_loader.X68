@@ -9,6 +9,28 @@ SHIP_BMP_SIZE       EQU 1162    ; The number of bytes betwen each ship file
 SHIP_PG_SIZE        EQU 1028     ; The size of a ship sprite in memory
 
 *,__________________________________________________,
+*| fn LoadLoading
+*| Description: Loads the load UI and quickly displays it
+fl_LoadLoading:
+    *| LoadBitmap(a0=file_root: bitmap*, a1=output_image: pixel_grid*)
+    move.l #LoadingBmpFile, a0   *| file_root
+    move.l #pg_Loading, a1       *| output_image
+    jsr fl_LoadBitmap
+
+    move.l #pg_Loading, a0
+    move.l #$00B400DC, d0
+    clr.l d1
+    jsr r_PrintImage
+
+    jsr SwapBuffer
+    
+.Return:
+    rts
+*| [End of Function] LoadResources
+*|__________________________________________________
+*`                                                  `
+
+*,__________________________________________________,
 *| fn LoadResources
 *| Description: Loads every file in the game
 fl_LoadFiles:
@@ -25,6 +47,11 @@ fl_LoadFiles:
     *| LoadBitmap(a0=file_root: bitmap*, a1=output_image: pixel_grid*)
     move.l #SevenSegHorizontalBmpFile, a0   *| file_root
     move.l #pg_7SegHorizontal, a1       *| output_image
+    jsr fl_LoadBitmap
+
+    *| LoadBitmap(a0=file_root: bitmap*, a1=output_image: pixel_grid*)
+    move.l #GameOverBmpFile, a0
+    move.l #pg_GameOver, a1
     jsr fl_LoadBitmap
 
     *| LoadBitmap(a0=file_root: bitmap*, a1=output_image: pixel_grid*)
@@ -264,7 +291,8 @@ fl_LoadCollisionMap:
 BackgroundBmpFile   INCBIN "../resources/background.bmp"
 PowerupBmpFile      INCBIN "../resources/pickup.bmp"
 
-LoadingBmpFile   INCBIN "../resources/background.bmp"
+LoadingBmpFile      INCBIN "../resources/loading.bmp"
+GameOverBmpFile     INCBIN "../resources/game_over.bmp"
 
 RoadCollisionFile   INCBIN "../resources/collision_map.txt"
 

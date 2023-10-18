@@ -199,6 +199,19 @@ pwr_FuelUp:
 
     jsr pwr_ClearPowerup    ; Clear texture & material
 
+    move.l #SET_PIXEL_COLOR, d0
+    move.l #FUEL_BAR_COLOR, d1
+
+    TRAP #15
+
+    move.l #PRINT_RECT, d0
+    move.w #FUEL_BAR_STARTX, d1
+    move.w #FUEL_BAR_STARTY, d2
+    move.w #FUEL_BAR_ENDX, d3
+    move.w #FUEL_BAR_ENDY, d4
+
+    TRAP #15
+
 .Return:
     movem.l (sp)+, ALL_REG  *| Pull registers from stack
 
@@ -207,9 +220,23 @@ pwr_FuelUp:
 *|__________________________________________________
 *`                                                  `
 
+FUEL_MAX                EQU 366
+FUEL_BAR_START          EQU $0257003C
 
+FUEL_BAR_STARTX         EQU $0257
+FUEL_BAR_STARTY         EQU $003C
+FUEL_BAR_ENDX           EQU $0272
+FUEL_BAR_ENDY           EQU $01AA
 
-CurrentPowerupLevel dc.l #366
+FUEL_BAR_WIDTH          EQU 28
+FUEL_BAR_COLOR          EQU $0043DB9C
 
-CurrentPowerupLoc  ds.l 1
-arr_PowerupLocations  dc.l $004B004B,$00FA00A0,$01540160,$02030118,$022B0046
+FuelLevel               ds.l 1
+
+CurrentPowerupLoc       ds.l 1
+arr_PowerupLocations    dc.l $004B004B,$00FA00A0,$01540160,$02030118,$022B0046
+
+*~Font name~Courier New~
+*~Font size~10~
+*~Tab type~1~
+*~Tab size~4~

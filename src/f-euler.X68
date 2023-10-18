@@ -28,6 +28,7 @@ GET_KEY_INPUT_COMMAND   EQU 19
 
 SET_PIXEL_COLOR     EQU 80
 PRINT_PIXEL         EQU 82
+PRINT_RECT          EQU 87
 
 GET_TIME            EQU 8
 
@@ -57,13 +58,15 @@ Main:
     
     TRAP #15
 
+    jsr fl_LoadLoading
+
     jsr fl_LoadFiles
     
     move.l #$00000000, d0   ; Position has no offset
     move.l #$00000000, d1   ; This is not a sprite, it's the background
     move.l #$00000000, d2
     move.l #pg_Background, a0
-    jsr r_PrintImage
+    jsr r_PrintImage 
     
     jsr ss_InitDisplays
     
@@ -80,6 +83,14 @@ Main:
     move.l #8, d2
 
     jsr GameLoop
+
+    ; Print game over screen
+    move.l #pg_GameOver, a0
+    move.l #$00B400DC, d0
+    clr.l d1
+    jsr r_PrintImage
+
+    jsr SwapBuffer
 
     STOP #$3000
 *| [End of Function] Main
@@ -192,7 +203,35 @@ UpdateTimer:
     jsr ss_SevenSegUpdate
 
     sub.l #8, a0            ; offset to start of last display
-    jmp .AddSecond          ; Continue loop
+
+.Add10Second:
+    add.l #6, a0            ; Offset to actual number
+    move.w (a0), d0         ; Grab number
+    add.l #1, d0            ; Increment by 1
+    cmp.l #5, d0            ; Has its number gone over 9?
+    ble.l .EndOverflow      ; If not, we're done.
+
+    ; Otherwise, we overflow to the next display
+    sub.l #6, a0            ; offset to start of current display
+    move.l #0, d0           ; New number in display must be 0
+    jsr ss_SevenSegUpdate
+
+    sub.l #8, a0            ; offset to start of last display
+
+.LastAdd:
+    add.l #6, a0            ; Offset to actual number
+    move.w (a0), d0         ; Grab number
+    add.l #1, d0            ; Increment by 1
+    cmp.l #5, d0            ; Has its number gone over 9?
+    ble.l .EndOverflow      ; If not, we're done.
+
+    ; Otherwise, we overflow to the next display
+    sub.l #6, a0            ; offset to start of current display
+    move.l #0, d0           ; New number in display must be 0
+    jsr ss_SevenSegUpdate
+
+    sub.l #8, a0            ; offset to start of last display
+    jmp .LastAdd
 
 .EndOverflow:
     sub.l #6, a0            ; Offset back to start of display addr
@@ -217,6 +256,7 @@ flag_IsBoosting     dc.w $0
 flag_CanLap         dc.w $0
 
     END    START
+
 
 *~Font name~Courier New~
 *~Font size~10~

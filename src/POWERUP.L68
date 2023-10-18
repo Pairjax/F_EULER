@@ -1,0 +1,266 @@
+00002000 Starting Address
+Assembler used: EASy68K Editor/Assembler v5.16.01
+Created On: 10/18/2023 1:10:16 AM
+
+00000000                             1  *,__________________________________________________,
+00000000                             2  *| Powerup                                          |
+00000000                             3  *| Description: Handles powerup pickup & use        |
+00000000                             4  *|__________________________________________________|
+00000000                             5  *`                                                  `
+00000000                             6  
+00000000  =00100010                  7  POWERUP_DIMENSIONS      EQU $00100010
+00000000                             8  
+00000000                             9  *,__________________________________________________,
+00000000                            10  *| [Powerup] SpawnPowerup
+00000000                            11  *| Description: Randomly spawns a new powerup on the map
+00000000                            12  pwr_SpawnPowerup:
+Line 13 ERROR: Undefined symbol
+00000000                            13      movem.l ALL_REG, -(sp)  *| Push registers to stack
+00000000                            14  
+Line 15 ERROR: Undefined symbol
+00000000  203C 004DBD16             15      move.l #GET_TIME, d0
+00000006  4E4F                      16      TRAP #15
+00000008                            17  
+00000008  2001                      18      move.l d1, d0
+0000000A  72AF                      19      moveq #$AF-$100, d1
+0000000C  7412                      20      moveq #18, d2
+0000000E                            21  
+0000000E                            22  .Ninc0:
+0000000E  D080                      23      add.l d0, d0
+00000010  6400 0004                 24      bcc .Ninc1
+00000014  B300                      25      eor.b d1, d0
+00000016                            26  
+00000016                            27  .Ninc1:
+00000016  51CA FFF6                 28      dbf d2, .Ninc0
+0000001A                            29  
+0000001A                            30      ; d0 stores final random number
+0000001A  C0BC 0000FFFF             31      and.l #$0000FFFF, d0
+00000020  80FC 0005                 32      divu.w #5, d0   ; Find rand % 5
+00000024  E088                      33      lsr.l #8, d0    ; Only want remainder
+00000026  E088                      34      lsr.l #8, d0
+00000028                            35  
+00000028                            36      ; d0 now stores the index of the spawn location
+00000028                            37  .GetLoc: ; Get spawn location
+00000028  207C 00000120             38      move.l #arr_PowerupLocations, a0
+0000002E  E588                      39      lsl.l #2, d0    ; Multiply index by length of element (Long)
+00000030  D1C0                      40      add.l d0, a0
+00000032                            41  
+00000032  2210                      42      move.l (a0), d1 ; d1 holds offset to new pickup location
+00000034                            43  
+00000034                            44  .ClearLast: ; Clears last powerup    
+00000034                            45      ; jsr pwr_ClearPowerup
+00000034                            46      
+00000034  23C1 0000011C             47      move.l d1, CurrentPowerupLoc ; Now we replace the old value
+0000003A                            48  
+0000003A                            49  .PrintSprite:
+0000003A  2001                      50      move.l d1, d0
+0000003C  4281                      51      clr.l d1   ; persistent
+Line 52 ERROR: Undefined symbol
+0000003E  207C 004DBD16             52      move.l #pg_Powerup, a0
+00000044                            53  
+Line 54 ERROR: Undefined symbol
+00000044  4EB9 004DBD16             54      jsr r_PrintImage
+0000004A                            55  
+0000004A                            56  .PrintMat:
+0000004A  2200                      57      move.l d0, d1
+0000004C  E088                      58      lsr.l #8, d0            ; Current X
+0000004E  E088                      59      lsr.l #8, d0    
+00000050  C2BC 0000FFFF             60      and.l #$0000FFFF, d1    ; Current Y
+00000056                            61  
+00000056  2C3C 00100010             62      move.l #POWERUP_DIMENSIONS, d6
+0000005C  2E06                      63      move.l d6, d7
+0000005E  E08E                      64      lsr.l #8, d6            ; W
+00000060  E08E                      65      lsr.l #8, d6
+00000062  CEBC 0000FFFF             66      and.l #$0000FFFF, d7    ; H
+00000068                            67  
+00000068  2400                      68      move.l d0, d2
+0000006A  D486                      69      add.l d6, d2            ; End X
+0000006C                            70  
+0000006C  2601                      71      move.l d1, d3
+0000006E  D687                      72      add.l d7, d3            ; End Y
+00000070                            73  
+Line 74 ERROR: Undefined symbol
+00000070  207C 004DBD16             74      move.l #cm_Road, a0
+00000076                            75  
+00000076                            76      *,__________________________________________________,
+00000076                            77      *| For Loop: for y = Offset Y, y < Offset Y + Height, y++ 
+00000076                            78  .MarkRow:
+00000076  2801                      79          move.l d1, d4
+Line 80 ERROR: Undefined symbol
+00000078  C8FC BD16                 80          mulu.w #SCREEN_WIDTH, d4    ; Current Y times Screen Width (width of collision map)
+0000007C  D880                      81          add.l d0, d4                ; Then, add x offset
+0000007E                            82  
+0000007E                            83          *,__________________________________________________,
+0000007E                            84          *| For Loop: for x = Offset X, x < Offset X + Width, x++
+0000007E                            85  .MarkPixel:
+0000007E  2248                      86              move.l a0, a1   ; Get location in collision map
+00000080  D3C4                      87              add.l d4, a1    ; Stored in bytes
+00000082                            88  
+00000082  12BC 0004                 89              move.b #4, (a1) ; Replace old material with Road
+00000086                            90  
+00000086  5280                      91              add.l #1, d0
+00000088                            92  
+00000088  B082                      93              cmp.l d2, d0        ; Are we at end of row?
+0000008A  6D00 FFF2                 94              blt.l .MarkPixel    ; If not, continue
+0000008E                            95          *| End For Loop
+0000008E                            96          
+0000008E                            97          ; Let's rewind x back to the start
+0000008E  9086                      98          sub.l d6, d0
+00000090                            99  
+00000090                           100          ; Let's push y to the next index
+00000090  5281                     101          add.l #1, d1
+00000092  B283                     102          cmp.l d3, d1    ; Are we at the end of the chunk?
+00000094  6D00 FFE0                103          blt.l .MarkRow  ; Nope, let's keep on moving
+00000098                           104  
+00000098                           105      *| End For Loop
+00000098                           106  
+00000098                           107  .Return:
+Line 108 ERROR: Undefined symbol
+00000098                           108      movem.l (sp)+, ALL_REG  *| Pull registers from stack
+00000098                           109  
+00000098  4E75                     110      rts
+0000009A                           111  *| [End of Function] SpawnPowerup
+0000009A                           112  *|__________________________________________________
+0000009A                           113  *`                                                  `
+0000009A                           114  
+0000009A                           115  *,__________________________________________________,
+0000009A                           116  *| [Powerup] ClearPowerup
+0000009A                           117  *| Description: Removes the current powerup from the screen
+0000009A                           118  pwr_ClearPowerup:
+Line 119 ERROR: Undefined symbol
+0000009A                           119      movem.l ALL_REG, -(sp)  *| Push registers to stack
+0000009A                           120  
+0000009A  2039 0000011C            121      move.l CurrentPowerupLoc, d0
+000000A0  B0BC FFFFFFFF            122      cmp.l #$FFFFFFFF, d0    ; is powerup location valid?
+000000A6  6700 006C                123      beq.l .Return
+000000AA                           124  
+Line 125 ERROR: Undefined symbol
+000000AA  2279 004DBD16            125      move.l pixel_clear_length, a1
+000000B0  2280                     126      move.l d0, (a1)                     ; Move image offset to pixel_clear_zones
+000000B2  5889                     127      add.l #4, a1                        ; Move to next word
+000000B4  22BC 00100010            128      move.l #POWERUP_DIMENSIONS, (a1)    ; Move image dimensions to pixel_clear_zones
+Line 129 ERROR: Undefined symbol
+000000BA  50B9 005455CC            129      add.l #8, pixel_clear_length        ; Move to next word
+000000C0                           130  
+000000C0                           131      ; Call an early sprite clear
+Line 132 ERROR: Undefined symbol
+000000C0  4EB9 004DBD16            132      jsr r_ClearSprites
+000000C6                           133  
+000000C6                           134      ; Let's also do the same for the material on the area it was on
+000000C6                           135  .WipeMat:
+000000C6  2200                     136      move.l d0, d1
+000000C8  E088                     137      lsr.l #8, d0            ; Current X
+000000CA  E088                     138      lsr.l #8, d0    
+000000CC  C2BC 0000FFFF            139      and.l #$0000FFFF, d1    ; Current Y
+000000D2                           140  
+000000D2  2C3C 00100010            141      move.l #POWERUP_DIMENSIONS, d6
+000000D8  2E06                     142      move.l d6, d7
+000000DA  E08E                     143      lsr.l #8, d6            ; W
+000000DC  E08E                     144      lsr.l #8, d6
+000000DE  CEBC 0000FFFF            145      and.l #$0000FFFF, d7    ; H
+000000E4                           146  
+000000E4  2400                     147      move.l d0, d2
+000000E6  D486                     148      add.l d6, d2            ; End X
+000000E8                           149  
+000000E8  2601                     150      move.l d1, d3
+000000EA  D687                     151      add.l d7, d3            ; End Y
+000000EC                           152  
+Line 153 ERROR: Undefined symbol
+000000EC  207C 004DBD16            153      move.l #cm_Road, a0
+000000F2                           154  
+000000F2                           155      *,__________________________________________________,
+000000F2                           156      *| For Loop: for y = Offset Y, y < Offset Y + Height, y++ 
+000000F2                           157  .WipeRow:
+000000F2  2801                     158          move.l d1, d4
+Line 159 ERROR: Undefined symbol
+000000F4  C8FC BD16                159          mulu.w #SCREEN_WIDTH, d4    ; Current Y times Screen Width (width of collision map)
+000000F8  D880                     160          add.l d0, d4                ; Then, add x offset
+000000FA                           161  
+000000FA                           162          *,__________________________________________________,
+000000FA                           163          *| For Loop: for x = Offset X, x < Offset X + Width, x++
+000000FA                           164  .WipePixel:
+000000FA  2248                     165              move.l a0, a1   ; Get location in collision map
+000000FC  D3C4                     166              add.l d4, a1    ; Stored in bytes
+000000FE                           167  
+000000FE  12BC 0001                168              move.b #1, (a1) ; Replace old material with Road
+00000102                           169  
+00000102  5280                     170              add.l #1, d0
+00000104                           171  
+00000104  B082                     172              cmp.l d2, d0        ; Are we at end of row?
+00000106  6D00 FFF2                173              blt.l .WipePixel    ; If not, continue
+0000010A                           174          *| End For Loop
+0000010A                           175          
+0000010A                           176          ; Let's rewind x back to the start
+0000010A  9086                     177          sub.l d6, d0
+0000010C                           178  
+0000010C                           179          ; Let's push y to the next index
+0000010C  5281                     180          add.l #1, d1
+0000010E  B283                     181          cmp.l d3, d1    ; Are we at the end of the chunk?
+00000110  6D00 FFE0                182          blt.l .WipeRow  ; Nope, let's keep on moving
+00000114                           183  
+00000114                           184      *| End For Loop
+00000114                           185  
+00000114                           186  .Return:
+Line 187 ERROR: Undefined symbol
+00000114                           187      movem.l (sp)+, ALL_REG  *| Pull registers from stack
+00000114                           188  
+00000114  4E75                     189      rts
+00000116                           190  *| [End of Function] ClearPowerup
+00000116                           191  *|__________________________________________________
+00000116                           192  *`                                                  `
+00000116                           193  
+00000116                           194  *,__________________________________________________,
+00000116                           195  *| [Powerup] FuelUp
+00000116                           196  *| Description: Resets fuel to max
+00000116                           197  pwr_FuelUp:
+Line 198 ERROR: Undefined symbol
+00000116                           198      movem.l ALL_REG, -(sp)  *| Push registers to stack
+00000116                           199  
+00000116  4EB8 009A                200      jsr pwr_ClearPowerup    ; Clear texture & material
+0000011A                           201  
+0000011A                           202  .Return:
+Line 203 ERROR: Undefined symbol
+0000011A                           203      movem.l (sp)+, ALL_REG  *| Pull registers from stack
+0000011A                           204  
+0000011A  4E75                     205      rts
+0000011C                           206  *| [End of Function] FuelUp
+0000011C                           207  *|__________________________________________________
+0000011C                           208  *`                                                  `
+0000011C                           209  
+0000011C                           210  
+0000011C                           211  
+Line 212 ERROR: Invalid syntax
+0000011C=                          212  CurrentPowerupLevel dc.l #366
+0000011C                           213  
+0000011C                           214  CurrentPowerupLoc  ds.l 1
+00000120= 004B004B 00FA00A0 ...    215  arr_PowerupLocations  dc.l $004B004B,$00FA00A0,$01540160,$02030118,$022B0046
+Line 216 WARNING: END directive missing, starting address not set
+
+17 errors detected
+1 warning generated
+
+
+SYMBOL TABLE INFORMATION
+Symbol-name         Value
+-------------------------
+ARR_POWERUPLOCATIONS  120
+CURRENTPOWERUPLEVEL  11C
+CURRENTPOWERUPLOC   11C
+POWERUP_DIMENSIONS  100010
+PWR_CLEARPOWERUP    9A
+PWR_CLEARPOWERUP:RETURN  114
+PWR_CLEARPOWERUP:WIPEMAT  C6
+PWR_CLEARPOWERUP:WIPEPIXEL  FA
+PWR_CLEARPOWERUP:WIPEROW  F2
+PWR_FUELUP          116
+PWR_FUELUP:RETURN   11A
+PWR_SPAWNPOWERUP    0
+PWR_SPAWNPOWERUP:CLEARLAST  34
+PWR_SPAWNPOWERUP:GETLOC  28
+PWR_SPAWNPOWERUP:MARKPIXEL  7E
+PWR_SPAWNPOWERUP:MARKROW  76
+PWR_SPAWNPOWERUP:NINC0  E
+PWR_SPAWNPOWERUP:NINC1  16
+PWR_SPAWNPOWERUP:PRINTMAT  4A
+PWR_SPAWNPOWERUP:PRINTSPRITE  3A
+PWR_SPAWNPOWERUP:RETURN  98
