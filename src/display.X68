@@ -28,6 +28,8 @@ ss_InitDisplays:
     jsr ss_SevenSegUpdate
 
     *| Setting up timer counters, from leftmost to rightmost
+    move.l #0, d0   ; Timer displays all start at 0
+    
     move.l #ssd_Timer, a0
     move.l #TIMER_1_DISPLAY_OFFSET, (a0)
     add.l #6, a0
@@ -37,7 +39,6 @@ ss_InitDisplays:
     jsr ss_SevenSegUpdate
 
     add.l #8, a0    ; Move a0 to next display in timer
-    move.l #0, d0   ; Timer displays all start at 0
 
     move.l #TIMER_2_DISPLAY_OFFSET, (a0)
 

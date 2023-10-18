@@ -26,7 +26,7 @@ fl_LoadFiles:
     move.l #SevenSegHorizontalBmpFile, a0   *| file_root
     move.l #pg_7SegHorizontal, a1       *| output_image
     jsr fl_LoadBitmap
-    
+
     *| LoadBitmap(a0=file_root: bitmap*, a1=output_image: pixel_grid*)
     move.l #PowerupBmpFile, a0   *| file_root
     move.l #pg_Powerup, a1       *| output_image
@@ -263,6 +263,8 @@ fl_LoadCollisionMap:
 
 BackgroundBmpFile   INCBIN "../resources/background.bmp"
 PowerupBmpFile      INCBIN "../resources/pickup.bmp"
+
+LoadingBmpFile   INCBIN "../resources/background.bmp"
 
 RoadCollisionFile   INCBIN "../resources/collision_map.txt"
 

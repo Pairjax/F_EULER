@@ -1,6 +1,4 @@
-import numpy as np
-from PIL import Image
-from matplotlib import pyplot as plt
+
 import math
 from decimal import *
 
@@ -13,8 +11,8 @@ angleList = []
 
 EIGHTPLACES = Decimal(2) ** -8
 
-for i in range(90):
-    angle = i * 4
+for i in range(16):
+    angle = i * 22.5
     angle /= 180
     angle *= math.pi
     sineResult = math.sin(angle)
