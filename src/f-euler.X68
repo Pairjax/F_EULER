@@ -33,9 +33,6 @@ GET_TIME            EQU 8
 
 SWAP_BUFFER         EQU 94
 
-*| 7 Segment Stuff
-SEVEN_SEG_DIMENSIONS    EQU $0012001F
-
 *,__________________________________________________,
 *| Includes
     INCLUDE "./file_loader.x68"   ; Handles loading of files during preload phase
@@ -44,6 +41,7 @@ SEVEN_SEG_DIMENSIONS    EQU $0012001F
 * INCLUDE "./gameplay.x68"        ; Handles in-game timer, lap counter, and game states
     INCLUDE "./physics.x68"       ; Calculates player acceleration, velocity, and collisions.
     INCLUDE "./display.x68"       ; Displays a 7-segment LED with the given parameters.
+    INCLUDE "./collider.x68"      ; Handles the materials the ship is currently on
 
 *,__________________________________________________,
 *| fn Main
@@ -205,104 +203,12 @@ UpdateTimer:
 *`                                                  `
 
 *,__________________________________________________,
-*| [Collisions] fn CheckCollisions
-*| Description: Checks what material the player is on
-cl_CheckCollisions:
-    ; Check root of ship location
-    move.l d5, d0
-    jsr cl_GetCollisionMaterial     ; d0 is now filled with material
-    jsr cl_ProcessMaterial
-
-    ; Check top right corner
-    move.l d5, d0
-    add.l #$000F0000, d0
-    jsr cl_GetCollisionMaterial     ; d0 is now filled with material
-    jsr cl_ProcessMaterial
-
-    ; Check bottom left corner
-    move.l d5, d0
-    add.l #$0000000F, d0
-    jsr cl_GetCollisionMaterial     ; d0 is now filled with material
-    jsr cl_ProcessMaterial
-
-    ; Check bottom right corner
-    move.l d5, d0
-    add.l #$000F000F, d0
-    jsr cl_GetCollisionMaterial     ; d0 is now filled with material
-    jsr cl_ProcessMaterial
-
-.Return:
-
+*| [Collider] SpawnPowerup
+*| Description: Spawns a new powerup on the map
+cl_SpawnPowerup:
+.Return
     rts
-*| [End of Function] CheckCollisions
-*|__________________________________________________
-*`                                                  `
-
-*,__________________________________________________,
-*| [Collisions] fn GetCollisionMaterial
-*| Description: Check what material is at a particular pixel address
-*| Input: d0: coordintaes (w1: x, w2: y)
-cl_GetCollisionMaterial:
-    move.l d0, d1
-    lsr.l #8, d0            ; X
-    lsr.l #8, d0
-    and.l #$0000FFFF, d1    ; Y
-
-    mulu.w #SCREEN_WIDTH, d1    ; Y * Screen Width
-    add.l d0, d1                ; + X = Index
-
-    move.l #cm_Road, a0
-    add.l d1, a0                ; Offset to material
-
-    move.b (a0), d0             ; Grab material
-    and.l #$000000FF, d0            ; Cut off leftmost bits
-
-.Return:
-
-    rts
-*| [End of Function] GetCollisionMaterial
-*|__________________________________________________
-*`                                                  `
-
-*,__________________________________________________,
-*| [Collisions] fn ProcessMaterial
-*| Description: Check what material is at a particular pixel address
-*| Input: d0: material
-cl_ProcessMaterial:
-.Offroad:
-    cmp.l #0, d0    ; Offroad?
-    bne.l .Lap
-
-    move.w #1, flag_IsDead  ; You're dead!
-    jmp .Return
-
-.Lap:
-    cmp.l #2, d0    ; On the lap?
-    bne.l .MidLap
-
-    cmp.w #0, flag_CanLap   ; Are we in a valid lap state?
-    beq.l .Return           ; If not, invalid
-
-    add.l #1, i_CurrentLap  ; Lap += 1 (TODO: Update lap UI)
-    move.w #0, flag_CanLap  ; CanLap = false
-
-.MidLap:
-    cmp.l #3, d0    ; On the mid-lap?
-    bne.l .Powerup
-
-    cmp.w #0, flag_CanLap   ; Are we in a valid lap state?
-    bne.l .Return           ; If not, invalid
-
-    move.w #1, flag_CanLap  ; CanLap = true
-
-.Powerup:
-    ; TODO: Whatever poewrups do
-
-.Return:
-    ; No special state for any other material
-
-    rts
-*| [End of Function] ProcessMaterial
+*| [End of Function] UpdateTimer
 *|__________________________________________________
 *`                                                  `
 
@@ -343,19 +249,11 @@ EndShipBmpFiles
 *| $0 = Width
 *| $2 = Height
 *| $4 = ABGR Pixels (List, length x * y)
-*>Renderer
 pg_Background   ds.l 307201     ; 1 + 640x480
 
 pg_ShipRotations        ds.l 4112   ; (1 + 16x16) x 16 for 16 unique sprites
 
 pg_Debris       ds.l 257        ; 1 + 16x16
-
-*| Data Type: Collision Map
-*| Each byte represents a single pixel on the screen.
-*| Dimension is assumed to be the dimensions of the screen.
-*| 0 = off the road, 1 = on the road, 
-*| 2 = lap, 3 = mid_lap, 4 = power_up
-cm_Road         ds.b 307200 ; 640 x 480
 
 *| Data Type: Pixel Clear Zones -> List<vec2, vec2>
 *| An array storing the zones that need to be cleared of pixels

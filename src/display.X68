@@ -4,7 +4,10 @@
 *|__________________________________________________|
 *`                                                  `
 
+SEVEN_SEG_DIMENSIONS    EQU $0012001F
+
 LAP_DISPLAY_OFFSET          EQU $02540014
+
 TIMER_1_DISPLAY_OFFSET      EQU $00050014
 TIMER_2_DISPLAY_OFFSET      EQU $001A0014
 TIMER_3_DISPLAY_OFFSET      EQU $00370014
@@ -20,17 +23,21 @@ ss_InitDisplays:
     *| Setting up lap counter
     move.l #ssd_Lap, a0
     move.l #LAP_DISPLAY_OFFSET, (a0)
-    move.l #0, d0
+    move.l #1, d0
 
     jsr ss_SevenSegUpdate
 
     *| Setting up timer counters, from leftmost to rightmost
     move.l #ssd_Timer, a0
     move.l #TIMER_1_DISPLAY_OFFSET, (a0)
+    add.l #6, a0
+    move.w #1, (a0)     ; Lap counter starts at 1
+    sub.l #6, a0
 
     jsr ss_SevenSegUpdate
 
     add.l #8, a0    ; Move a0 to next display in timer
+    move.l #0, d0   ; Timer displays all start at 0
 
     move.l #TIMER_2_DISPLAY_OFFSET, (a0)
 
@@ -183,6 +190,35 @@ ss_SevenSegUpdate:
 .Return:
     movem.l (sp)+, ALL_REG  *| Pull registers from stack
 
+    rts
+*| [End of Function] SevSegUpdate
+*|__________________________________________________
+*`                                                  `
+
+*,__________________________________________________,
+*| IncrementLap
+ss_IncrementLap:
+    movem.l TRAP_REG, -(sp) *| Push registers to stack
+
+    move.l #ssd_Lap, a0
+    add.l #6, a0            ; Offset to actual number
+    move.w (a0), d0         ; Grab number
+    add.l #1, d0            ; Increment by 1
+    cmp.l #3, d0            ; Has its number gone over 3?
+    bgt.l .EndGame          ; If so, game over.
+
+    ; Otherwise, let's increment and update
+    sub.l #6, a0            ; offset to start of current display
+    jsr ss_SevenSegUpdate
+
+    jmp .Return
+
+.EndGame:
+    move.w #1, flag_IsDead  ; Game is over!
+
+.Return:
+    movem.l (sp)+, TRAP_REG  *| Pull registers from stack
+    
     rts
 *| [End of Function] SevSegUpdate
 *|__________________________________________________
