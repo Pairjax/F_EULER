@@ -227,6 +227,24 @@ SwapBuffer:
 *|__________________________________________________
 *`                                                  `
 
+*,__________________________________________________,
+*| Variables
+
+*| Data Type: Pixel Clear Zones -> List<vec2, vec2>
+*| An array storing the zones that need to be cleared of pixels
+*| Long 1: Stores a vec2 representing the offset in x, y
+*| Long 2: Stores a vec2 representing the width and height
+pixel_clear_zones   ds.l 40     ; Max of 20 zones to clear at any given time
+pixel_clear_length  ds.l 1      ; Pointer to the last empty address
+
+*| Data Type: Pixel Grid (pg)
+*| $0 = Width
+*| $2 = Height
+*| $4 = ABGR Pixels (List, length x * y)
+pg_Background   ds.l 307201     ; 1 + 640x480
+pg_ShipRotations        ds.l 4112   ; (1 + 16x16) x 16 for 16 unique sprites
+pg_Powerup       ds.l 257        ; 1 + 16x16  
+
 *~Font name~Courier New~
 *~Font size~10~
 *~Tab type~1~

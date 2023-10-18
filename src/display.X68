@@ -240,3 +240,10 @@ SevenSegTable       dc.b %11101110,%00100100,%10111010
 *| $6 = TimeToDisplay?
 ssd_Lap         ds.l 2
 ssd_Timer       ds.l 8
+
+*| Data Type: Pixel Grid (pg)
+*| $0 = Width
+*| $2 = Height
+*| $4 = ABGR Pixels (List, length x * y)
+pg_7SegVertical     ds.l 65     ; 1 + 16x4
+pg_7SegHorizontal   ds.l 65     ; 1 + 16x4

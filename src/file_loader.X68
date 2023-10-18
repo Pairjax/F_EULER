@@ -26,6 +26,11 @@ fl_LoadFiles:
     move.l #SevenSegHorizontalBmpFile, a0   *| file_root
     move.l #pg_7SegHorizontal, a1       *| output_image
     jsr fl_LoadBitmap
+    
+    *| LoadBitmap(a0=file_root: bitmap*, a1=output_image: pixel_grid*)
+    move.l #PowerupBmpFile, a0   *| file_root
+    move.l #pg_Powerup, a1       *| output_image
+    jsr fl_LoadBitmap
 
     jsr fl_LoadCollisionMap     ; No inputs needed because there is only one
 
@@ -252,6 +257,33 @@ fl_LoadCollisionMap:
 *| [End of Function] LoadBitmap
 *|__________________________________________________
 *`                                                  `
+
+*,__________________________________________________,
+*| Input Variables
+
+BackgroundBmpFile   INCBIN "../resources/background.bmp"
+PowerupBmpFile      INCBIN "../resources/pickup.bmp"
+
+RoadCollisionFile   INCBIN "../resources/collision_map.txt"
+
+*| Ship Rotations
+ShipBmpFiles        INCBIN "../resources/ship_rotations/Ship_R0.bmp"
+                    INCBIN "../resources/ship_rotations/Ship_R22.5.bmp"
+                    INCBIN "../resources/ship_rotations/Ship_R45.bmp"
+                    INCBIN "../resources/ship_rotations/Ship_R67.5.bmp"
+                    INCBIN "../resources/ship_rotations/Ship_R90.bmp"
+                    INCBIN "../resources/ship_rotations/Ship_R112.5.bmp"
+                    INCBIN "../resources/ship_rotations/Ship_R135.bmp"
+                    INCBIN "../resources/ship_rotations/Ship_R157.5.bmp"
+                    INCBIN "../resources/ship_rotations/Ship_R180.bmp"
+                    INCBIN "../resources/ship_rotations/Ship_R202.5.bmp"
+                    INCBIN "../resources/ship_rotations/Ship_R225.bmp"
+                    INCBIN "../resources/ship_rotations/Ship_R247.5.bmp"
+                    INCBIN "../resources/ship_rotations/Ship_R270.bmp"
+                    INCBIN "../resources/ship_rotations/Ship_R292.5.bmp"
+                    INCBIN "../resources/ship_rotations/Ship_R315.bmp"
+                    INCBIN "../resources/ship_rotations/Ship_R337.5.bmp"
+EndShipBmpFiles
 
 *~Font name~Courier New~
 *~Font size~10~

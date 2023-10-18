@@ -84,8 +84,10 @@ cl_ProcessMaterial:
     cmp.w #0, flag_CanLap   ; Are we in a valid lap state?
     beq.l .Return           ; If not, invalid
 
-    jsr IncrementLap
+    jsr ss_IncrementLap
     move.w #0, flag_CanLap  ; CanLap = false
+
+    jsr pwr_SpawnPowerup    ; New powerup
 
     jmp .Return
 
@@ -99,7 +101,10 @@ cl_ProcessMaterial:
     move.w #1, flag_CanLap  ; CanLap = true
 
 .Powerup:
-    ; TODO: Whatever poewrups do
+    cmp.l #3, d0    ; On powerup?
+    bne.l .Return   ; End of custom materials
+
+    jsr pwr_FuelUp
 
 .Return:
     ; No special state for any other material
