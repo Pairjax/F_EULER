@@ -101,7 +101,7 @@ cl_ProcessMaterial:
     move.w #1, flag_CanLap  ; CanLap = true
 
 .Powerup:
-    cmp.l #3, d0    ; On powerup?
+    cmp.l #4, d0    ; On powerup?
     bne.l .Return   ; End of custom materials
 
     jsr pwr_FuelUp

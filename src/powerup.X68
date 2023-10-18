@@ -89,6 +89,7 @@ pwr_SpawnPowerup:
             move.b #4, (a1) ; Replace old material with Road
 
             add.l #1, d0
+            add.l #1, d4
 
             cmp.l d2, d0        ; Are we at end of row?
             blt.l .MarkPixel    ; If not, continue
@@ -121,6 +122,8 @@ pwr_ClearPowerup:
     move.l CurrentPowerupLoc, d0
     cmp.l #$FFFFFFFF, d0    ; is powerup location valid?
     beq.l .Return
+
+    jsr r_ClearSprites
 
     move.l pixel_clear_length, a1
     move.l d0, (a1)                     ; Move image offset to pixel_clear_zones
@@ -168,6 +171,7 @@ pwr_ClearPowerup:
             move.b #1, (a1) ; Replace old material with Road
 
             add.l #1, d0
+            add.l #1, d4
 
             cmp.l d2, d0        ; Are we at end of row?
             blt.l .WipePixel    ; If not, continue
@@ -220,6 +224,42 @@ pwr_FuelUp:
 *|__________________________________________________
 *`                                                  `
 
+*,__________________________________________________,
+*| [Powerup] FuelUse
+*| Description: If any is available, use the fuel to
+*|              phase shift
+pwr_FuelUse:
+    movem.l ALL_REG, -(sp)  *| Push registers to stack
+    
+    move.l d4, d0
+    and.l #$000000FF, d0    ; Is the player holding space?
+    cmp.b #$FF, d0
+    bne.l .Return   ; If not, do nothing
+
+    move.l FuelLevel, d0
+    sub.l #1, d0
+    cmp.l #0, d0    ; Is d0 negative?
+    bls.l .Return   ; Out of fuel
+
+    move.l FUEL_BAR_STARTX, d1
+    move.l FUEL_BAR_ENDY, d2
+    sub.l d0, d2
+
+    move.l FUEL_BAR_ENDX, d3
+    move.l d2, d4
+
+    move.l #PRINT_LINE, d0
+
+    TRAP #15
+
+.Return:
+    movem.l (sp)+, ALL_REG  *| Pull registers from stack
+
+    rts
+*| [End of Function] FuelUse
+*|__________________________________________________
+*`                                                  `
+
 FUEL_MAX                EQU 366
 FUEL_BAR_START          EQU $0257003C
 
@@ -234,7 +274,7 @@ FUEL_BAR_COLOR          EQU $0043DB9C
 FuelLevel               ds.l 1
 
 CurrentPowerupLoc       ds.l 1
-arr_PowerupLocations    dc.l $004B004B,$00FA00A0,$01540160,$02030118,$022B0046
+arr_PowerupLocations    dc.l $022B0046,$022B0046,$022B0046,$022B0046,$022B0046
 
 *~Font name~Courier New~
 *~Font size~10~

@@ -27,7 +27,9 @@ SCREEN_HEIGHT       EQU 480
 GET_KEY_INPUT_COMMAND   EQU 19
 
 SET_PIXEL_COLOR     EQU 80
+SET_FILL_COLOR      EQU 81
 PRINT_PIXEL         EQU 82
+PRINT_LINE          EQU 84
 PRINT_RECT          EQU 87
 
 GET_TIME            EQU 8
@@ -78,9 +80,21 @@ Main:
 
     move.l d1, LastSecond    ; This time is the start of the game
 
+    jsr pwr_FuelUp
     jsr pwr_SpawnPowerup
+    
+    move.l #SET_FILL_COLOR, d0  ; Set fill color to default green
+    move.l #FUEL_BAR_COLOR, d1
 
-    move.l #8, d2
+    TRAP #15
+
+    move.l #8, d2   ; Sets starting rotation to 180 degrees
+
+    
+    move.l #70, d0
+    move.l #game_song, a1
+    
+    TRAP #15
 
     jsr GameLoop
 
@@ -123,7 +137,8 @@ GameLoop:
     *| STAGE ONE: Capture Inputs |
     *|___________________________|
     *`                           ` 
-    jsr i_CaptureInputs   ; Fills registers d3-d4 (destructively) with player inputs
+    jsr i_CaptureInputs     ; Fills registers d3-d4 (destructively) with player inputs
+    jsr pwr_FuelUse         ; Check if the player is using fuel to enter imaginary space
 
     *,___________________________,
     *| STAGE TWO: Physics Pass   |
@@ -255,7 +270,10 @@ flag_IsDead         dc.w $0
 flag_IsBoosting     dc.w $0
 flag_CanLap         dc.w $0
 
+game_song           dc.b '../resources/song.wav',0
+
     END    START
+
 
 
 *~Font name~Courier New~
